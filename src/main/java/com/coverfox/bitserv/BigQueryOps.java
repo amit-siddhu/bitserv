@@ -158,7 +158,7 @@ public class BigQueryOps {
     return latestDataset;
   }
 
-  public Table createTable(String datasetName, String tableName, String fieldName) {
+  public static Table createTable(String datasetName, String tableName, String fieldName) {
     Table table = null;
     TableId tableId = TableId.of(datasetName, tableName);
     Field field = Field.of(fieldName, Field.Type.string());
@@ -257,7 +257,7 @@ public class BigQueryOps {
     return response;
   }
 
-  public Table updateTable(String datasetName, String tableName, String newFriendlyName) {
+  public static Table updateTable(String datasetName, String tableName, String newFriendlyName) {
     Table newTable = null;
     Table oldTable = bigquery.getTable(datasetName, tableName);
     TableInfo tableInfo = oldTable.toBuilder().setFriendlyName(newFriendlyName).build();

@@ -42,8 +42,10 @@ public class ActionHandler {
       case "table":
         switch (action) {
           case "create":
+            BigQueryOps.createTable(data.getString("dataset"), data.getString("name"), data.getString("field"));
             break;
           case "update":
+            BigQueryOps.updateTable(data.getString("dataset"), data.getString("name"), data.getString("newFriendlyName"));
             break;
           case "insert":
             break;
@@ -56,7 +58,7 @@ public class ActionHandler {
         }
         break;
       default:
-        break;
+        logger.error("Target: [" + target + "] not found");
     }
   }
 }
