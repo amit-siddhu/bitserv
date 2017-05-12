@@ -19,7 +19,7 @@ public class BitservApp {
   private static final String RABBIT_QUEUE_NAME = "hello";
 
   public static void main(String[] argv) throws Exception {
-
+    logger.info("Booting Bitserv");
     ConnectionFactory factory = new ConnectionFactory();
 
     factory.setHost("localhost");
@@ -34,9 +34,10 @@ public class BitservApp {
     Connection connection = factory.newConnection();
     Channel channel = connection.createChannel();
     channel.queueDeclare(RABBIT_QUEUE_NAME, false, false, false, null);
-    logger.info("BigQuery Connector started");
+    logger.info("Bitserv connected to RabbitMQ");
 
     ActionHandler actionHandler = new ActionHandler();
+    logger.info("Bitserv connected to BigQuery");
 
     Consumer consumer = new DefaultConsumer(channel) {
       @Override
@@ -44,11 +45,7 @@ public class BitservApp {
           throws IOException {
 
         String message = new String(body, "UTF-8");
-        logger.info(" [x] Received '" + message + "'");
-
         actionHandler.handle(message);
-
-        logger.info("Handling done.");
 
       }
     };
