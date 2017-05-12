@@ -233,7 +233,7 @@ public class BigQueryOps {
     return stats.getOutputRows();
   }
 
-  public InsertAllResponse insertAll(String datasetName, String tableName) {
+  public static InsertAllResponse insertAll(String datasetName, String tableName) {
     TableId tableId = TableId.of(datasetName, tableName);
     // Values of the row to insert
     Map<String, Object> rowContent = new HashMap<>();

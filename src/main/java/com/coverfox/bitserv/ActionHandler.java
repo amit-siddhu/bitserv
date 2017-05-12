@@ -48,6 +48,7 @@ public class ActionHandler {
             BigQueryOps.updateTable(data.getString("dataset"), data.getString("name"), data.getString("newFriendlyName"));
             break;
           case "insert":
+            BigQueryOps.insertAll(data.getString("dataset"), data.getString("table"));
             break;
           case "delete":
             break;
