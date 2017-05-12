@@ -10,9 +10,8 @@ import org.apache.logging.log4j.Logger;
 public class ActionHandler {
 
   private static final Logger logger = LogManager.getLogger(BigQueryOps.class);
-  BigQueryOps bqops = new BigQueryOps();
 
-  public void handle(String message) {
+  public static void handle(String message) {
 
     logger.info("Message received in handler: " + message);
     JSONObject msgObj = new JSONObject(message);
@@ -26,10 +25,10 @@ public class ActionHandler {
       case "dataset":
         switch (action) {
           case "create":
-            bqops.createDataset(data.getString("name"));
+            BigQueryOps.createDataset(data.getString("name"));
             break;
           case "rename":
-            bqops.updateDataset(data.getString("name"), data.getString("new_name"));
+            BigQueryOps.updateDataset(data.getString("name"), data.getString("new_name"));
             break;
           case "delete":
             break;

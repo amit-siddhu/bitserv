@@ -60,7 +60,7 @@ public class BigQueryOps {
   private static final Logger logger = LogManager.getLogger(BigQueryOps.class);
   public static final BigQuery bigquery = BigQueryOptions.getDefaultInstance().getService();
 
-  public Dataset createDataset(String datasetName) {
+  public static Dataset createDataset(String datasetName) {
     Dataset dataset = null;
     DatasetInfo datasetInfo = DatasetInfo.newBuilder(datasetName).build();
     try {
@@ -72,7 +72,7 @@ public class BigQueryOps {
     return dataset;
   }
 
-  public Dataset updateDataset(String datasetName, String newFriendlyName) {
+  public static Dataset updateDataset(String datasetName, String newFriendlyName) {
     Dataset newDataset = null;
     Dataset oldDataset = bigquery.getDataset(datasetName);
     DatasetInfo datasetInfo = oldDataset.toBuilder().setFriendlyName(newFriendlyName).build();
