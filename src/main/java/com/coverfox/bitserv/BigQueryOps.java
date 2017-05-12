@@ -108,7 +108,7 @@ public class BigQueryOps {
     return dataset;
   }
 
-  public Boolean deleteDataset(String datasetName) {
+  public static Boolean deleteDataset(String datasetName) {
     Boolean deleted = false;
     try {
       deleted = bigquery.delete(datasetName, DatasetDeleteOption.deleteContents());

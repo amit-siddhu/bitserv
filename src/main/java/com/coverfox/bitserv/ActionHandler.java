@@ -18,7 +18,7 @@ public class ActionHandler {
     String target = msgObj.getString("target");
     String action = msgObj.getString("action");
     JSONObject data = msgObj.getJSONObject("data");
-    logger.info("Performing action: " + action + " on target: " + target + " with data: " + data);
+    logger.info("Performing action: [" + action + "] on target: [" + target + "] with data: " + data);
 
     switch (target) {
 
@@ -27,12 +27,14 @@ public class ActionHandler {
           case "create":
             BigQueryOps.createDataset(data.getString("name"));
             break;
-          case "rename":
-            BigQueryOps.updateDataset(data.getString("name"), data.getString("new_name"));
+          case "update":
+            BigQueryOps.updateDataset(data.getString("name"), data.getString("newFriendlyName"));
             break;
           case "delete":
+            BigQueryOps.deleteDataset(data.getString("name"));
             break;
           default:
+            logger.error("Action: [" + action + "] not found for target: [" + target + "]");
             break;
         }
         break;
@@ -41,15 +43,13 @@ public class ActionHandler {
         switch (action) {
           case "create":
             break;
-          case "rename":
-            break;
-          case "drop":
+          case "update":
             break;
           case "insert":
             break;
-          case "update":
-            break;
           case "delete":
+            break;
+          case "drop":
             break;
           default:
             break;
