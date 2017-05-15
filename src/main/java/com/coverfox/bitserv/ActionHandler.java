@@ -21,40 +21,38 @@ public class ActionHandler {
     logger.info("Performing action: [" + action + "] on target: [" + target + "] with data: " + data);
 
     switch (target) {
-
       case "dataset":
         switch (action) {
           case "create":
-            BigQueryOps.createDataset(data.getString("name"));
+            BigQueryOps.createDataset(data.getJSONObject("schema"));
             break;
           case "update":
-            BigQueryOps.updateDataset(data.getString("name"), data.getString("newFriendlyName"));
+            BigQueryOps.updateDataset(data.getJSONObject("schema"));
             break;
           case "delete":
-            BigQueryOps.deleteDataset(data.getString("name"));
+            BigQueryOps.deleteDataset(data.getJSONObject("schema"));
             break;
           default:
             logger.error("Action: [" + action + "] not found for target: [" + target + "]");
             break;
         }
         break;
-
       case "table":
         switch (action) {
           case "create":
-            BigQueryOps.createTable(data.getString("dataset"), data.getString("name"), data.getString("field"));
+            BigQueryOps.createTable(data.getJSONObject("schema"));
             break;
           case "update":
-            BigQueryOps.updateTable(data.getString("dataset"), data.getString("name"), data.getString("newFriendlyName"));
+            BigQueryOps.updateTable(data.getJSONObject("schema"));
             break;
           case "insert":
-            BigQueryOps.insertAll(data.getString("dataset"), data.getString("table"));
+            BigQueryOps.insertAll(data.getJSONObject("schema"));
             break;
           case "delete":
-            break;
-          case "drop":
+            BigQueryOps.deleteTable(data.getJSONObject("schema"));
             break;
           default:
+            logger.error("Action: [" + action + "] not found for target: [" + target + "]");
             break;
         }
         break;

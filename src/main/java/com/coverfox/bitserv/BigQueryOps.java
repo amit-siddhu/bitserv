@@ -41,18 +41,22 @@ import com.google.cloud.bigquery.WriteChannelConfiguration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.UUID;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.concurrent.TimeoutException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.concurrent.TimeoutException;
+import java.util.UUID;
 
 
 public class BigQueryOps {
@@ -60,7 +64,8 @@ public class BigQueryOps {
   private static final Logger logger = LogManager.getLogger(BigQueryOps.class);
   public static final BigQuery bigquery = BigQueryOptions.getDefaultInstance().getService();
 
-  public static Dataset createDataset(String datasetName) {
+  public static Dataset createDataset(JSONObject jDatasetSchema) {
+    String datasetName = jDatasetSchema.getString("name");
     Dataset dataset = null;
     DatasetInfo datasetInfo = DatasetInfo.newBuilder(datasetName).build();
     try {
@@ -72,7 +77,9 @@ public class BigQueryOps {
     return dataset;
   }
 
-  public static Dataset updateDataset(String datasetName, String newFriendlyName) {
+  public static Dataset updateDataset(JSONObject jDatasetSchema) {
+    String datasetName = jDatasetSchema.getString("name");
+    String newFriendlyName = jDatasetSchema.getString("newFriendlyName");
     Dataset newDataset = null;
     Dataset oldDataset = bigquery.getDataset(datasetName);
     DatasetInfo datasetInfo = oldDataset.toBuilder().setFriendlyName(newFriendlyName).build();
@@ -108,7 +115,8 @@ public class BigQueryOps {
     return dataset;
   }
 
-  public static Boolean deleteDataset(String datasetName) {
+  public static Boolean deleteDataset(JSONObject jDatasetSchema) {
+    String datasetName = jDatasetSchema.getString("name");
     Boolean deleted = false;
     try {
       deleted = bigquery.delete(datasetName, DatasetDeleteOption.deleteContents());
@@ -158,13 +166,21 @@ public class BigQueryOps {
     return latestDataset;
   }
 
-  public static Table createTable(String datasetName, String tableName, String fieldName) {
+  public static Table createTable(JSONObject jTableSchema) {
+    String datasetName = jTableSchema.getString("dataset");
+    String tableName = jTableSchema.getString("name");
+    JSONArray jColumnsSchema = jTableSchema.getJSONArray("fields");
     Table table = null;
     TableId tableId = TableId.of(datasetName, tableName);
-    Field field = Field.of(fieldName, Field.Type.string());
-    Schema schema = Schema.of(field);
+    ArrayList<Field> fields = new ArrayList<Field>();
+    fields = SchemaConverter.toBQTableSchema(jColumnsSchema);
+    logger.debug(fields);
+    Schema schema = Schema.of(fields);
+    logger.debug("Schema: " + schema);
     TableDefinition tableDefinition = StandardTableDefinition.of(schema);
+    logger.debug("TableDef: " + tableDefinition);
     TableInfo tableInfo = TableInfo.newBuilder(tableId, tableDefinition).build();
+    logger.debug("TableInfo: " + tableInfo);
     try {
       table = bigquery.create(tableInfo);
       logger.info("[CREATE_TABLE_SUCCESS]: " + table);
@@ -233,7 +249,9 @@ public class BigQueryOps {
     return stats.getOutputRows();
   }
 
-  public static InsertAllResponse insertAll(String datasetName, String tableName) {
+  public static InsertAllResponse insertAll(JSONObject jTableSchema) {
+    String datasetName = jTableSchema.getString("dataset");
+    String tableName = jTableSchema.getString("name");
     TableId tableId = TableId.of(datasetName, tableName);
     // Values of the row to insert
     Map<String, Object> rowContent = new HashMap<>();
@@ -257,7 +275,10 @@ public class BigQueryOps {
     return response;
   }
 
-  public static Table updateTable(String datasetName, String tableName, String newFriendlyName) {
+  public static Table updateTable(JSONObject jTableSchema) {
+    String datasetName = jTableSchema.getString("dataset");
+    String tableName = jTableSchema.getString("name");
+    String newFriendlyName = jTableSchema.getString("newFriendlyName");
     Table newTable = null;
     Table oldTable = bigquery.getTable(datasetName, tableName);
     TableInfo tableInfo = oldTable.toBuilder().setFriendlyName(newFriendlyName).build();
@@ -269,7 +290,9 @@ public class BigQueryOps {
     return newTable;
   }
 
-  public Boolean deleteTable(String datasetName, String tableName) {
+  public static Boolean deleteTable(JSONObject jTableSchema) {
+    String datasetName = jTableSchema.getString("dataset");
+    String tableName = jTableSchema.getString("name");
     Boolean deleted = false;
     try {
       deleted = bigquery.delete(datasetName, tableName);
