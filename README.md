@@ -87,7 +87,7 @@ CREATE TABLE:
     'target': 'table',
     'action': 'create',
     'data': {
-        schema: {
+        'schema': {
             'name': 'testTable',
             'dataset': 'testDataset',
             'fields': [
@@ -208,7 +208,7 @@ INSERT INTO TABLE:
     'target': 'table',
     'action': 'insert',
     'data': {
-        schema: {
+        'schema': {
             'name': 'testTable',
             'dataset': 'testDataset',
             'rows': [
