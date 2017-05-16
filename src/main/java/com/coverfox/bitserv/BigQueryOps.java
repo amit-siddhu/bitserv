@@ -62,12 +62,18 @@ import java.util.UUID;
 public class BigQueryOps {
 
   private static final Logger logger = LogManager.getLogger(BigQueryOps.class);
-  public static final BigQuery bigquery = BigQueryOptions.getDefaultInstance().getService();
+  private static final BigQuery bigquery = BigQueryOptions.getDefaultInstance().getService();
+  private JSONObject data;
 
-  public static Dataset createDataset(JSONObject jDatasetSchema) {
-    String datasetName = jDatasetSchema.getString("name");
+  public BigQueryOps(JSONObject data) {
+    this.data = data;
+  }
+
+  public Dataset createDataset() {
     Dataset dataset = null;
-    DatasetInfo datasetInfo = DatasetInfo.newBuilder(datasetName).build();
+    DatasetInfo datasetInfo = DatasetInfo.newBuilder(
+      this.data.getJSONObject("schema").getString("name")
+    ).build();
     try {
       dataset = bigquery.create(datasetInfo);
       logger.info("[CREATE_DATASET_SUCCESS]: " + dataset);
@@ -77,7 +83,8 @@ public class BigQueryOps {
     return dataset;
   }
 
-  public static Dataset updateDataset(JSONObject jDatasetSchema) {
+  public Dataset updateDataset() {
+    JSONObject jDatasetSchema = this.data.getJSONObject("schema");
     String datasetName = jDatasetSchema.getString("name");
     String newFriendlyName = jDatasetSchema.getString("newFriendlyName");
     Dataset newDataset = null;
@@ -92,30 +99,8 @@ public class BigQueryOps {
     return newDataset;
   }
 
-  public Dataset getDataset(String datasetName) {
-    Dataset dataset = null;
-    try {
-      dataset = bigquery.getDataset(datasetName);
-      logger.info("[GET_DATASET_SUCCESS]: " + dataset);
-    } catch (BigQueryException e) {
-      logger.error("[GET_DATASET_ERROR]: " + dataset);
-    }
-    return dataset;
-  }
-
-  public Dataset getDatasetFromId(String projectId, String datasetName) {
-    Dataset dataset = null;
-    DatasetId datasetId = DatasetId.of(projectId, datasetName);
-    try {
-      dataset = bigquery.getDataset(datasetId);
-      logger.info("[GET_DATASET_SUCCESS]: " + dataset);
-    } catch (BigQueryException e) {
-      logger.error("[GET_DATASET_ERROR]: " + dataset);
-    }
-    return dataset;
-  }
-
-  public static Boolean deleteDataset(JSONObject jDatasetSchema) {
+  public Boolean deleteDataset() {
+    JSONObject jDatasetSchema = this.data.getJSONObject("schema");
     String datasetName = jDatasetSchema.getString("name");
     Boolean deleted = false;
     try {
@@ -131,56 +116,28 @@ public class BigQueryOps {
     return deleted;
   }
 
-  public Boolean deleteDatasetFromId(String projectId, String datasetName) {
-    Boolean deleted = false;
-    DatasetId datasetId = DatasetId.of(projectId, datasetName);
+  private Dataset getDataset(String datasetName) {
+    Dataset dataset = null;
     try {
-      deleted = bigquery.delete(datasetId, DatasetDeleteOption.deleteContents());
+      dataset = bigquery.getDataset(datasetName);
+      logger.info("[GET_DATASET_SUCCESS]: " + dataset);
     } catch (BigQueryException e) {
-      logger.error("[DELETE_DATASET_ERROR]: " + e);
+      logger.error("[GET_DATASET_ERROR]: " + dataset);
     }
-    if (deleted) {
-      logger.info("[DELETE_DATASET_SUCCESS]: " + datasetName);
-    } else {
-      logger.error("[DELETE_DATASET_ERROR]: " + datasetName);
-    }
-    return deleted;
+    return dataset;
   }
 
-  public boolean doesDatasetExist(Dataset dataset) {
-    boolean exists = false;
-    exists = dataset.exists();
-    if (exists) {
-      logger.info("[DATASET_EXIST]: " + dataset);
-    } else {
-      logger.error("[DATASET_NOT_FOUND]: " + dataset);
-    }
-    return exists;
-  }
-
-  public Dataset reloadDataset(Dataset dataset) {
-    Dataset latestDataset = dataset.reload();
-    if (latestDataset == null) {
-      logger.error("[RELOAD_DATASET_FAILED]: " + dataset);
-    }
-    return latestDataset;
-  }
-
-  public static Table createTable(JSONObject jTableSchema) {
+  public Table createTable() {
+    JSONObject jTableSchema = this.data.getJSONObject("schema");
     String datasetName = jTableSchema.getString("dataset");
     String tableName = jTableSchema.getString("name");
-    JSONArray jColumnsSchema = jTableSchema.getJSONArray("fields");
     Table table = null;
     TableId tableId = TableId.of(datasetName, tableName);
     ArrayList<Field> fields = new ArrayList<Field>();
-    fields = SchemaConverter.toBQTableSchema(jColumnsSchema);
-    logger.debug(fields);
+    fields = new SchemaConverter().toBQTableSchema(jTableSchema.getJSONArray("fields"));
     Schema schema = Schema.of(fields);
-    logger.debug("Schema: " + schema);
     TableDefinition tableDefinition = StandardTableDefinition.of(schema);
-    logger.debug("TableDef: " + tableDefinition);
     TableInfo tableInfo = TableInfo.newBuilder(tableId, tableDefinition).build();
-    logger.debug("TableInfo: " + tableInfo);
     try {
       table = bigquery.create(tableInfo);
       logger.info("[CREATE_TABLE_SUCCESS]: " + table);
@@ -190,66 +147,8 @@ public class BigQueryOps {
     return table;
   }
 
-  public Table getTable(String datasetName, String tableName) {
-    Table table = null;
-    try {
-      table = bigquery.getTable(datasetName, tableName);
-      logger.info("[GET_TABLE_SUCCESS]: " + table);
-    } catch (BigQueryException e) {
-      logger.info("[GET_TABLE_ERROR]: " + table);
-    }
-    return table;
-  }
-
-  public Table getTableFromId(String projectId, String datasetName, String tableName) {
-    Table table = null;
-    TableId tableId = TableId.of(projectId, datasetName, tableName);
-    try {
-      table = bigquery.getTable(datasetName, tableName);
-      logger.info("[GET_TABLE_SUCCESS]: " + table);
-    } catch (BigQueryException e) {
-      logger.info("[GET_TABLE_ERROR]: " + table);
-    }
-    return table;
-  }
-
-  public long writeToTable(String datasetName, String tableName, String csvData)
-      throws IOException, InterruptedException, TimeoutException {
-    TableId tableId = TableId.of(datasetName, tableName);
-    WriteChannelConfiguration writeChannelConfiguration =
-        WriteChannelConfiguration.newBuilder(tableId)
-            .setFormatOptions(FormatOptions.csv())
-            .build();
-    TableDataWriteChannel writer = bigquery.writer(writeChannelConfiguration);
-     try {
-        writer.write(ByteBuffer.wrap(csvData.getBytes(Charsets.UTF_8)));
-      } finally {
-        writer.close();
-      }
-      Job job = writer.getJob();
-      job = job.waitFor();
-      LoadStatistics stats = job.getStatistics();
-      return stats.getOutputRows();
-  }
-
-  public long writeFileToTable(String datasetName, String tableName, Path csvPath)
-      throws IOException, InterruptedException, TimeoutException {
-    TableId tableId = TableId.of(datasetName, tableName);
-    WriteChannelConfiguration writeChannelConfiguration =
-        WriteChannelConfiguration.newBuilder(tableId)
-            .setFormatOptions(FormatOptions.csv())
-            .build();
-    TableDataWriteChannel writer = bigquery.writer(writeChannelConfiguration);
-    try (OutputStream stream = Channels.newOutputStream(writer)) {
-      Files.copy(csvPath, stream);
-    }
-    Job job = writer.getJob();
-    job = job.waitFor();
-    LoadStatistics stats = job.getStatistics();
-    return stats.getOutputRows();
-  }
-
-  public static InsertAllResponse insertAll(JSONObject jTableSchema) {
+  public InsertAllResponse insertAll() {
+    JSONObject jTableSchema = this.data.getJSONObject("schema");
     String datasetName = jTableSchema.getString("dataset");
     String tableName = jTableSchema.getString("name");
     TableId tableId = TableId.of(datasetName, tableName);
@@ -275,7 +174,8 @@ public class BigQueryOps {
     return response;
   }
 
-  public static Table updateTable(JSONObject jTableSchema) {
+  public Table updateTable() {
+    JSONObject jTableSchema = this.data.getJSONObject("schema");
     String datasetName = jTableSchema.getString("dataset");
     String tableName = jTableSchema.getString("name");
     String newFriendlyName = jTableSchema.getString("newFriendlyName");
@@ -290,7 +190,8 @@ public class BigQueryOps {
     return newTable;
   }
 
-  public static Boolean deleteTable(JSONObject jTableSchema) {
+  public Boolean deleteTable() {
+    JSONObject jTableSchema = this.data.getJSONObject("schema");
     String datasetName = jTableSchema.getString("dataset");
     String tableName = jTableSchema.getString("name");
     Boolean deleted = false;
@@ -304,221 +205,5 @@ public class BigQueryOps {
     } else {
     }
     return deleted;
-  }
-
-  public Boolean deleteTableFromId(String projectId, String datasetName, String tableName) {
-    Boolean deleted = false;
-    TableId tableId = TableId.of(projectId, datasetName, tableName);
-    try {
-      deleted = bigquery.delete(tableId);
-    } catch (BigQueryException e) {
-      logger.error("[DELETE_TABLE_ERROR]: datasetName: " + datasetName + " tableName: " + tableName);
-    }
-    if (deleted) {
-      logger.info("[DELETE_TABLE_SUCCESS]: datasetName: " + datasetName + " tableName: " + tableName);
-    } else {
-    }
-    return deleted;
-  }
-
-  public Page<List<FieldValue>> listTableData(String datasetName, String tableName) {
-    Page<List<FieldValue>> tableData =
-        bigquery.listTableData(datasetName, tableName, TableDataListOption.pageSize(100));
-    for (List<FieldValue> row : tableData.iterateAll()) {
-      // do something with the row
-    }
-    return tableData;
-  }
-
-  public Page<List<FieldValue>> listTableDataFromId(String datasetName, String tableName) {
-    TableId tableIdObject = TableId.of(datasetName, tableName);
-    Page<List<FieldValue>> tableData =
-        bigquery.listTableData(tableIdObject, TableDataListOption.pageSize(100));
-    for (List<FieldValue> row : tableData.iterateAll()) {
-      // do something with the row
-    }
-    return tableData;
-  }
-
-  public Job createJob(String query) {
-    Job job = null;
-    JobConfiguration jobConfiguration = QueryJobConfiguration.of(query);
-    JobInfo jobInfo = JobInfo.of(jobConfiguration);
-    try {
-      job = bigquery.create(jobInfo);
-      logger.info("[CREATE_JOB_SUCCESS]: " + job);
-    } catch (BigQueryException e) {
-      logger.error("[CREATE_JOB_ERROR]: " + job);
-    }
-    return job;
-  }
-
-  public Page<Job> listJobs() {
-    Page<Job> jobs = bigquery.listJobs(JobListOption.pageSize(100));
-    for (Job job : jobs.iterateAll()) {
-      // do something with the job
-    }
-    return jobs;
-  }
-
-  public Job getJob(String jobName) {
-    Job job = null;
-    try {
-      job = bigquery.getJob(jobName);
-      logger.info("[GET_JOB_SUCCESS]: " + job);
-    } catch (BigQueryException e) {
-      logger.error("[GET_JOB_ERROR]: " + job);
-    }
-    if (job == null) {
-      logger.error("[GET_JOB_FAILED]: " + job);
-    }
-    return job;
-  }
-
-  public Job getJobFromId(String jobName) {
-    Job job = null;
-    JobId jobIdObject = JobId.of(jobName);
-    try {
-      job = bigquery.getJob(jobIdObject);
-      logger.info("[GET_JOB_SUCCESS]: " + job);
-    } catch (BigQueryException e) {
-      logger.error("[GET_JOB_ERROR]: " + e);
-    }
-    if (job == null) {
-      logger.error("[GET_JOB_FAILED]: " + job);
-    }
-    return job;
-  }
-
-  public boolean cancelJob(String jobName) {
-    boolean success = false;
-    try {
-      success = bigquery.cancel(jobName);
-    } catch (BigQueryException e) {
-      logger.error("[CANCEL_JOB_ERROR]: " + e);
-    }
-    if (success) {
-      logger.info("[CANCEL_JOB_SUCCESS]: " + jobName);
-    } else {
-      logger.error("[CANCEL_JOB_FAILED]: " + jobName);
-    }
-    return success;
-  }
-
-  public boolean cancelJobFromId(String jobName) {
-    boolean success = false;
-    JobId jobId = JobId.of(jobName);
-    try {
-      success = bigquery.cancel(jobId);
-    } catch (BigQueryException e) {
-      logger.error("[CANCEL_JOB_ERROR]: " + e);
-    }
-    if (success) {
-      logger.info("[CANCEL_JOB_SUCCESS]: " + jobName);
-    } else {
-      logger.error("[CANCEL_JOB_FAILED]: " + jobName);
-    }
-    return success;
-  }
-
-  public QueryResponse runQuery(String query) throws InterruptedException {
-    QueryRequest request = QueryRequest.of(query);
-    QueryResponse response = bigquery.query(request);
-    while (!response.jobCompleted()) {
-      Thread.sleep(1000);
-      response = bigquery.getQueryResults(response.getJobId());
-    }
-    if (response.hasErrors()) {
-      logger.error("[RUN_QUERY_ERROR]: " + response);
-    }
-    QueryResult result = response.getResult();
-    for (List<FieldValue> row : result.iterateAll()) {
-      // do something with the data
-    }
-    return response;
-  }
-
-  public QueryResponse runQueryWithParameters(String query) throws InterruptedException {
-    QueryRequest request = QueryRequest.newBuilder(query)
-        .setUseLegacySql(false)
-        .addNamedParameter("wordCount", QueryParameterValue.int64(5))
-        .build();
-    QueryResponse response = bigquery.query(request);
-    while (!response.jobCompleted()) {
-      Thread.sleep(1000);
-      response = bigquery.getQueryResults(response.getJobId());
-    }
-    if (response.hasErrors()) {
-      logger.error("[RUN_QUERY_ERROR]: " + response);
-    }
-    QueryResult result = response.getResult();
-    for (List<FieldValue> row : result.iterateAll()) {
-      // do something with the data
-    }
-    return response;
-  }
-
-  public QueryResponse queryResults(final String query) throws InterruptedException {
-    QueryRequest request = QueryRequest.of(query);
-    QueryResponse response = bigquery.query(request);
-    while (!response.jobCompleted()) {
-      Thread.sleep(1000);
-      response = bigquery.getQueryResults(response.getJobId());
-    }
-    if (response.hasErrors()) {
-      logger.error("[GET_QUERY_RESULTS_ERROR]: " + response);
-    }
-    QueryResult result = response.getResult();
-    for (List<FieldValue> row : result.iterateAll()) {
-      // do something with the data
-    }
-    return response;
-  }
-
-  public void getData(String data) throws Exception {
-
-    QueryJobConfiguration queryConfig =
-        QueryJobConfiguration.newBuilder(
-                "SELECT "
-                    + "APPROX_TOP_COUNT(corpus, 10) as title, "
-                    + "COUNT(*) as unique_words "
-                    + "FROM `publicdata.samples." + data + "`;")
-            .setUseLegacySql(false)
-            .build();
-
-    JobId jobId = JobId.of(UUID.randomUUID().toString());
-    Job queryJob = bigquery.create(JobInfo.newBuilder(queryConfig).setJobId(jobId).build());
-
-    queryJob = queryJob.waitFor();
-
-    if (queryJob == null) {
-      throw new RuntimeException("Job no longer exists");
-    } else if (queryJob.getStatus().getError() != null) {
-
-      throw new RuntimeException(queryJob.getStatus().getError().toString());
-    }
-
-    QueryResponse response = bigquery.getQueryResults(jobId);
-
-    QueryResult result = response.getResult();
-
-    while (result != null) {
-      for (List<FieldValue> row : result.iterateAll()) {
-        List<FieldValue> titles = row.get(0).getRepeatedValue();
-        System.out.println("titles:");
-
-        for (FieldValue titleValue : titles) {
-          List<FieldValue> titleRecord = titleValue.getRecordValue();
-          String title = titleRecord.get(0).getStringValue();
-          long uniqueWords = titleRecord.get(1).getLongValue();
-          System.out.printf("\t%s: %d\n", title, uniqueWords);
-        }
-
-        long uniqueWords = row.get(1).getLongValue();
-        System.out.printf("total unique words: %d\n", uniqueWords);
-      }
-
-      result = result.getNextPage();
-    }
   }
 }

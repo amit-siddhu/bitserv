@@ -10,27 +10,27 @@ import org.apache.logging.log4j.Logger;
 public class ActionHandler {
 
   private static final Logger logger = LogManager.getLogger(BigQueryOps.class);
+  private JSONObject message;
 
-  public static void handle(String message) {
+  public ActionHandler(String message) {
+    this.message = new JSONObject(message);
+  }
 
-    logger.info("Message received in handler: " + message);
-    JSONObject msgObj = new JSONObject(message);
-    String target = msgObj.getString("target");
-    String action = msgObj.getString("action");
-    JSONObject data = msgObj.getJSONObject("data");
-    logger.info("Performing action: [" + action + "] on target: [" + target + "] with data: " + data);
+  public void handle() {
+    String target = this.message.getString("target");
+    String action = this.message.getString("action");
 
     switch (target) {
       case "dataset":
         switch (action) {
           case "create":
-            BigQueryOps.createDataset(data.getJSONObject("schema"));
+            new BigQueryOps(this.message.getJSONObject("data")).createDataset();
             break;
           case "update":
-            BigQueryOps.updateDataset(data.getJSONObject("schema"));
+            new BigQueryOps(this.message.getJSONObject("data")).updateDataset();
             break;
           case "delete":
-            BigQueryOps.deleteDataset(data.getJSONObject("schema"));
+            new BigQueryOps(this.message.getJSONObject("data")).deleteDataset();
             break;
           default:
             logger.error("Action: [" + action + "] not found for target: [" + target + "]");
@@ -40,16 +40,16 @@ public class ActionHandler {
       case "table":
         switch (action) {
           case "create":
-            BigQueryOps.createTable(data.getJSONObject("schema"));
+            new BigQueryOps(this.message.getJSONObject("data")).createTable();
             break;
           case "update":
-            BigQueryOps.updateTable(data.getJSONObject("schema"));
+            new BigQueryOps(this.message.getJSONObject("data")).updateTable();
             break;
           case "insert":
-            BigQueryOps.insertAll(data.getJSONObject("schema"));
+            new BigQueryOps(this.message.getJSONObject("data")).insertAll();
             break;
           case "delete":
-            BigQueryOps.deleteTable(data.getJSONObject("schema"));
+            new BigQueryOps(this.message.getJSONObject("data")).deleteTable();
             break;
           default:
             logger.error("Action: [" + action + "] not found for target: [" + target + "]");
@@ -58,6 +58,7 @@ public class ActionHandler {
         break;
       default:
         logger.error("Target: [" + target + "] not found");
+        break;
     }
   }
 }
