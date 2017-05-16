@@ -39,8 +39,9 @@ public class BitservApp {
       @Override
       public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
           throws IOException {
-        logger.debug("Received message: " + body);
-        new ActionHandler(new String(body, "UTF-8")).handle();
+        String message = new String(body, "UTF-8");
+        logger.info("[X] Message received: " + message);
+        new ActionHandler(message).handle();
 
       }
     };

@@ -42,6 +42,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
@@ -53,6 +54,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.concurrent.TimeoutException;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -152,25 +154,26 @@ public class BigQueryOps {
     String datasetName = jTableSchema.getString("dataset");
     String tableName = jTableSchema.getString("name");
     TableId tableId = TableId.of(datasetName, tableName);
-    // Values of the row to insert
-    Map<String, Object> rowContent = new HashMap<>();
-    rowContent.put("booleanField", true);
-    // Bytes are passed in base64
-    rowContent.put("bytesField", "Cg0NDg0="); // 0xA, 0xD, 0xD, 0xE, 0xD in base64
-    // Records are passed as a map
-    Map<String, Object> recordsContent = new HashMap<>();
-    recordsContent.put("stringField", "Hello, World!");
-    rowContent.put("recordField", recordsContent);
-    InsertAllResponse response = bigquery.insertAll(InsertAllRequest.newBuilder(tableId)
-        .addRow("rowId", rowContent)
-        // More rows can be added in the same RPC by invoking .addRow() on the builder
-        .build());
-    if (response.hasErrors()) {
-      // If any of the insertions failed, this lets you inspect the errors
-      for (Entry<Long, List<BigQueryError>> entry : response.getInsertErrors().entrySet()) {
-        // inspect row error
-      }
+
+    Iterator<?> jRows = jTableSchema.getJSONArray("rows").iterator();
+    JSONObject jRow = null;
+    String insertId = null;
+    InsertAllRequest.Builder rowBuilder =  InsertAllRequest.newBuilder(tableId);
+
+    while (jRows.hasNext()) {
+      jRow = (JSONObject) jRows.next();
+      insertId = jRow.getString("insertId");
+      Map<String, Object> row = jsonToMap(jRow.getJSONObject("json"));
+      logger.debug("Adding Row with InsertId [" + insertId + "] and Data: [" + row + "]");
+      rowBuilder.addRow(insertId, row);
     }
+
+    InsertAllResponse response = bigquery.insertAll(rowBuilder.build());
+
+    if (response.hasErrors()) {
+      logger.error("Error inserting data: " + response);
+    }
+    logger.info("Inserted : " + response);
     return response;
   }
 
@@ -205,5 +208,50 @@ public class BigQueryOps {
     } else {
     }
     return deleted;
+  }
+
+  private static Map<String, Object> jsonToMap(JSONObject json) throws JSONException {
+      Map<String, Object> retMap = new HashMap<String, Object>();
+
+      if(json != JSONObject.NULL) {
+          retMap = toMap(json);
+      }
+      return retMap;
+  }
+
+  private static Map<String, Object> toMap(JSONObject object) throws JSONException {
+      Map<String, Object> map = new HashMap<String, Object>();
+
+      Iterator<String> keysItr = object.keys();
+      while(keysItr.hasNext()) {
+          String key = keysItr.next();
+          Object value = object.get(key);
+
+          if(value instanceof JSONArray) {
+              value = toList((JSONArray) value);
+          }
+
+          else if(value instanceof JSONObject) {
+              value = toMap((JSONObject) value);
+          }
+          map.put(key, value);
+      }
+      return map;
+  }
+
+  private static List<Object> toList(JSONArray array) throws JSONException {
+      List<Object> list = new ArrayList<Object>();
+      for(int i = 0; i < array.length(); i++) {
+          Object value = array.get(i);
+          if(value instanceof JSONArray) {
+              value = toList((JSONArray) value);
+          }
+
+          else if(value instanceof JSONObject) {
+              value = toMap((JSONObject) value);
+          }
+          list.add(value);
+      }
+      return list;
   }
 }
