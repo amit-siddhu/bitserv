@@ -9,17 +9,23 @@ Technologies involved:
 Data format:
 
 1. Target - Can be dataset or table.
+  
   target:
+    
     a. dataset
     b. table
 
 2. Action - Action depends on target.
+  
   a. dataset
+    
     action:
       1. create
       2. update
       3. delete
+  
   b. table:
+    
     action:
       1. create
       2. update
@@ -32,6 +38,7 @@ Sample data format for above action:
 
 CREATE DATASET:
 
+```python
 {
     'target': 'dataset',
     'action': 'create',
@@ -41,10 +48,12 @@ CREATE DATASET:
         }
     }
 }
+```
 
 
 UPDATE DATASET:
 
+```python
 {
     'target': 'dataset',
     'action': 'update',
@@ -55,9 +64,11 @@ UPDATE DATASET:
         }
     }
 }
+```
 
 DELETE DATASET:
 
+```python
 {
    'target': 'dataset',
    'action': 'delete',
@@ -67,10 +78,11 @@ DELETE DATASET:
         }
     }
 }
-
+```
 
 CREATE TABLE:
 
+```python
 {
     'target': 'table',
     'action': 'create',
@@ -156,9 +168,11 @@ CREATE TABLE:
         }
     }
 }
+```
 
 UPDATE TABLE:
 
+```python
 {
     'target': 'table',
     'action': 'update',
@@ -170,9 +184,11 @@ UPDATE TABLE:
         }
     }
 }
+```
 
 DELETE TABLE:
 
+```python
 {
    'target': 'table',
    'action': 'delete',
@@ -183,9 +199,11 @@ DELETE TABLE:
         }
     }
 }
+```
 
 INSERT INTO TABLE:
 
+```python
 {
     'target': 'table',
     'action': 'insert',
@@ -256,3 +274,4 @@ INSERT INTO TABLE:
         }
     }
 }
+```
