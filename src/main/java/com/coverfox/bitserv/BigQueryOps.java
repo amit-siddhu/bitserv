@@ -187,6 +187,7 @@ public class BigQueryOps {
     TableInfo tableInfo = oldTable.toBuilder().setFriendlyName(newFriendlyName).build();
     try {
       newTable = bigquery.update(tableInfo);
+      logger.info("[UPDATE_TABLE_SUCCESS]: " + newTable);
     } catch (BigQueryException e) {
       logger.error("[UPDATE_TABLE_ERROR]: " + e);
     }
