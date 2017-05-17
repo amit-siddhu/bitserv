@@ -96,7 +96,7 @@ public class SchemaConverter {
           curField.setMode(Field.Mode.REQUIRED);
           break;
         default:
-          logger.error("Invalid mode: [" + field.has("mode") + "] on field: " + field);
+          logger.error("Invalid mode: [" + field.getString("mode") + "] on field: " + field);
           return null;
       }
     }
