@@ -20,13 +20,13 @@ public class BitservApp {
   private static final Logger logger = LogManager.getLogger(BitservApp.class);
 
   public static void main(String[] argv) throws Exception {
-    logger.info("Booting Bitserv");
-
     Args args = new Args();
     JCommander.newBuilder()
       .addObject(args)
       .build()
       .parse(argv);
+
+    logger.info("Booting Bitserv");
     ConnectionFactory factory = new ConnectionFactory();
 
     factory.setHost(args.getrmHost());
