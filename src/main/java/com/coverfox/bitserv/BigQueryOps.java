@@ -164,7 +164,6 @@ public class BigQueryOps {
       jRow = (JSONObject) jRows.next();
       insertId = jRow.getString("insertId");
       Map<String, Object> row = jsonToMap(jRow.getJSONObject("json"));
-      logger.debug("Adding Row with InsertId [" + insertId + "] and Data: [" + row + "]");
       rowBuilder.addRow(insertId, row);
     }
 
@@ -173,7 +172,7 @@ public class BigQueryOps {
     if (response.hasErrors()) {
       logger.error("Error inserting data: " + response);
     }
-    logger.info("Inserted : " + response);
+    logger.info("Inserted : " + jTableSchema.getJSONArray("rows"));
     return response;
   }
 
