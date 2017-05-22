@@ -172,7 +172,9 @@ public class BigQueryOps {
     if (response.hasErrors()) {
       logger.error("Error inserting data: " + response);
     }
-    logger.info("Inserted : " + jTableSchema.getJSONArray("rows"));
+    else {
+      logger.info("Inserted : " + jTableSchema.getJSONArray("rows"));
+    }
     return response;
   }
 
