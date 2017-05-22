@@ -33,6 +33,7 @@ public class BitservApp {
     factory.setPort(args.getrmPort());
     factory.setUsername(args.getrmUser());
     factory.setPassword(args.getrmPass());
+    factory.setVirtualHost(args.getrmVhost());
     final ExceptionHandler eh = new DefaultExceptionHandler() {
       @Override
       public void handleConsumerException(Channel channel, Throwable exception, Consumer consumer, String consumerTag, String methodName) {
@@ -77,6 +78,9 @@ class Args {
   @Parameter(names = "-rmQueue", description = "RabbitMQ queue name")
   private static String rmQueue = "testQueue";
 
+  @Parameter(names = "-rmVhost", description = "RabbitMQ virtual host")
+  private static String rmVhost = "/";
+
   public String getrmHost() {
     return this.rmHost;
   }
@@ -95,5 +99,9 @@ class Args {
 
   public String getrmQueue() {
     return this.rmQueue;
+  }
+
+  public String getrmVhost() {
+    return this.rmVhost;
   }
 }
