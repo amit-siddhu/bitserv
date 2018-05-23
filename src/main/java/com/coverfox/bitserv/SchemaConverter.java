@@ -2,26 +2,10 @@ package com.coverfox.bitserv;
 
 import com.google.cloud.bigquery.Field;
 import com.google.cloud.bigquery.Field.Builder;
-import com.google.cloud.bigquery.QueryResponse;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-
-import java.math.BigInteger;
-import java.util.Collections;
-import java.util.List;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 import java.util.ArrayList;
 import java.util.Iterator;
 
-import static java.util.Objects.isNull;
-import static java.util.stream.Collectors.toList;
-
 import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import org.apache.logging.log4j.LogManager;
@@ -30,9 +14,7 @@ import org.apache.logging.log4j.Logger;
 public class SchemaConverter {
 
   private static final Logger logger = LogManager.getLogger(SchemaConverter.class);
-  private static final JsonParser PARSER = new JsonParser();
-
-  public ArrayList toBQTableSchema(JSONArray jsonSchema) {
+  public ArrayList<Field> toBQTableSchema(JSONArray jsonSchema) {
 
     ArrayList<Field> bqFields = new ArrayList<Field>();
     Iterator<?> jFields = jsonSchema.iterator();

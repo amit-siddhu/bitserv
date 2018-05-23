@@ -1,7 +1,5 @@
 package com.coverfox.bitserv;
 
-import static com.google.common.truth.Truth.assertThat;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -12,7 +10,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 
 @RunWith(JUnit4.class)
-@SuppressWarnings("checkstyle:abbreviationaswordinname")
 public class BigQueryOpsTest {
   private ByteArrayOutputStream bout;
   private PrintStream out;

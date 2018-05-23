@@ -1,7 +1,5 @@
 package com.coverfox.bitserv;
 
-import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import org.apache.logging.log4j.LogManager;

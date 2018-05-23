@@ -64,22 +64,22 @@ public class BitservApp {
 
 class Args {
   @Parameter(names = "-rmHost", description = "RabbitMQ host address")
-  private static String rmHost = "localhost";
+  private String rmHost = "localhost";
 
   @Parameter(names = "-rmPort", description = "RabbitMQ port")
-  private static Integer rmPort = 5672;
+  private Integer rmPort = 5672;
 
   @Parameter(names = "-rmUser", description = "RabbitMQ username")
-  private static String rmUser = "guest";
+  private String rmUser = "guest";
 
-  @Parameter(names = "-rmPass", description = "RabbitMQ password", password = true)
-  private static String rmPass = "guest";
+  @Parameter(names = "-rmPass", description = "RabbitMQ password")
+  private String rmPass = "guest";
 
   @Parameter(names = "-rmQueue", description = "RabbitMQ queue name")
-  private static String rmQueue = "testQueue";
+  private String rmQueue = "testQueue";
 
   @Parameter(names = "-rmVhost", description = "RabbitMQ virtual host")
-  private static String rmVhost = "/";
+  private String rmVhost = "/";
 
   public String getrmHost() {
     return this.rmHost;

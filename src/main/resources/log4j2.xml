@@ -1,9 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration xmlns="http://logging.apache.org/log4j/2.0/config">
+    <Properties>
+        <Property name="baseDir">logs</Property>
+    </Properties>
     <Appenders>
-        <File name="FILE" fileName="logs/App.log" append="true">
+        <RollingFile name="RollingFile" fileName="logs/bitserv.log" filePattern="logs/$${date:yyyy-MM}/bitserv-%d{MM-dd-yyyy}-%i.log.gz">
             <PatternLayout pattern="%-5p | %d{yyyy-MM-dd HH:mm:ss} | [%t] %C{2} (%F:%L) - %m%n"/>
-        </File>
+            <Policies>
+                <TimeBasedTriggeringPolicy />
+                <SizeBasedTriggeringPolicy size="200 MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10">
+                <Delete basePath="${baseDir}" maxDepth="2">
+                    <IfFileName glob="*/bitserv-*.log.gz" />
+                    <IfLastModified age="30d" />
+                </Delete>
+            </DefaultRolloverStrategy>
+        </RollingFile>
         <Console name="STDOUT" target="SYSTEM_OUT">
             <PatternLayout pattern="%-5p | %d{yyyy-MM-dd HH:mm:ss} | [%t] %C{2} (%F:%L) - %m%n"/>
         </Console>
@@ -12,7 +25,7 @@
         <Logger name="com.coverfox.bitserv" level="debug"/>
         <Root level="info">
             <AppenderRef ref="STDOUT"/>
-            <AppenderRef ref="FILE"/>
+            <AppenderRef ref="RollingFile"/>
         </Root>
     </Loggers>
 </Configuration>
