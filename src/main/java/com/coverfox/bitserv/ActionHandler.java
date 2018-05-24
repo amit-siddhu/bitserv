@@ -9,9 +9,11 @@ public class ActionHandler {
 
   private static final Logger logger = LogManager.getLogger(BigQueryOps.class);
   private JSONObject message;
+  private static BatchInsertionControl insertionControl;
 
   public ActionHandler(String message) {
     this.message = new JSONObject(message);
+    insertionControl = BatchInsertionControl.getInstance(); // do bufferring or know when to perform insertion
   }
 
   public void handle() {
@@ -44,7 +46,7 @@ public class ActionHandler {
             new BigQueryOps(this.message.getJSONObject("data")).updateTable();
             break;
           case "insert":
-            new BigQueryOps(this.message.getJSONObject("data")).insertAll();
+            new BigQueryOps(this.message.getJSONObject("data")).processBatchInsertion(insertionControl);
             break;
           case "delete":
             new BigQueryOps(this.message.getJSONObject("data")).deleteTable();

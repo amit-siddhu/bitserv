@@ -20,6 +20,7 @@ import com.google.cloud.bigquery.Dataset;
 import com.google.cloud.bigquery.DatasetInfo;
 import com.google.cloud.bigquery.Field;
 import com.google.cloud.bigquery.InsertAllRequest;
+import com.google.cloud.bigquery.InsertAllRequest.Builder;
 import com.google.cloud.bigquery.InsertAllResponse;
 import com.google.cloud.bigquery.Schema;
 import com.google.cloud.bigquery.StandardTableDefinition;
@@ -106,8 +107,8 @@ public class BigQueryOps {
     return table;
   }
 
-  public InsertAllResponse insertAll() {
-    JSONObject jTableSchema = this.data.getJSONObject("schema");
+  public InsertAllRequest prepareBigQueryInsertRequest(JSONObject data) {
+    JSONObject jTableSchema = data.getJSONObject("schema");
     String datasetName = jTableSchema.getString("dataset");
     String tableName = jTableSchema.getString("name");
     TableId tableId = TableId.of(datasetName, tableName);
@@ -123,13 +124,35 @@ public class BigQueryOps {
       Map<String, Object> row = jsonToMap(jRow.getJSONObject("json"));
       rowBuilder.addRow(insertId, row);
     }
+    return rowBuilder.build();
+  }
 
-    InsertAllResponse response = bigquery.insertAll(rowBuilder.build());
+  public void processBatchInsertion(BatchInsertionControl insertionControl){
+    if( insertionControl.isBufferable() ){
+      InsertAllRequest request = this.prepareBigQueryInsertRequest(this.data);
+      insertionControl.buffer(this.data,request);
+    }else{
+      // ArrayList<InsertAllRequest> bufferList = insertionControl.getBufferedMessages();
+      // for(){
+      //   InsertAllResponse response = bigquery.insertAll(rowBuilder.build());
+      // }
+      // if (response.hasErrors()) {
+      //     logger.error("Error inserting data: " + response);
+      //   }
+      //   else {
+      //     logger.info("Inserted : " + response);
+      //   }
+      //   return response;
+    }
+  }
 
+
+  public InsertAllResponse insertAll() {
+    InsertAllRequest request = this.prepareBigQueryInsertRequest(this.data);
+    InsertAllResponse response = bigquery.insertAll(request);
     if (response.hasErrors()) {
       logger.error("Error inserting data: " + response);
-    }
-    else {
+    }else {
       logger.info("Inserted : " + response);
     }
     return response;
