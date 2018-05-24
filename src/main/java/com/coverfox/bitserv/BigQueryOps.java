@@ -106,7 +106,10 @@ public class BigQueryOps {
     }
     return table;
   }
-
+  /*
+  * For each table, raw requests (mostly one) are converted to BigQuery request objects
+  * [DEPRICATED]
+  */
   public InsertAllRequest prepareBigQueryInsertRequest(JSONObject data) {
     JSONObject jTableSchema = data.getJSONObject("schema");
     String datasetName = jTableSchema.getString("dataset");
@@ -126,30 +129,73 @@ public class BigQueryOps {
     }
     return rowBuilder.build();
   }
+  /*
+  * For each table, accumulated raw insert requests are converted to BigQuery request objects
+  */
+  public InsertAllRequest prepareBigQueryInsertRequestFromBuffer(ArrayList<JSONObject> bufferedRequests) {
+    JSONObject jTableSchema = bufferedRequests.get(0).getJSONObject("schema");
+    String datasetName = jTableSchema.getString("dataset");
+    String tableName = jTableSchema.getString("name");
+    TableId tableId = TableId.of(datasetName, tableName);
+    InsertAllRequest.Builder rowBuilder =  InsertAllRequest.newBuilder(tableId);
 
-  public void processBatchInsertion(BatchInsertionControl insertionControl){
-    if( insertionControl.isBufferable() ){
-      InsertAllRequest request = this.prepareBigQueryInsertRequest(this.data);
-      insertionControl.buffer(this.data,request);
-    }else{
-      // ArrayList<InsertAllRequest> bufferList = insertionControl.getBufferedMessages();
-      // for(){
-      //   InsertAllResponse response = bigquery.insertAll(rowBuilder.build());
-      // }
-      // if (response.hasErrors()) {
-      //     logger.error("Error inserting data: " + response);
-      //   }
-      //   else {
-      //     logger.info("Inserted : " + response);
-      //   }
-      //   return response;
+    JSONObject jRow = null;
+    String insertId = null;
+    for(JSONObject bufferedRequest : bufferedRequests){
+      Iterator<?> jRows = bufferedRequest.getJSONObject("schema").getJSONArray("rows").iterator();;
+      while (jRows.hasNext()) {
+        jRow = (JSONObject) jRows.next();
+        insertId = jRow.getString("insertId");
+        Map<String, Object> row = jsonToMap(jRow.getJSONObject("json"));
+        rowBuilder.addRow(insertId, row);
+      }
     }
+    return rowBuilder.build();
   }
+  /*
+  * Makes Api call for batch of raw events from rabbitmq.
+  * Cached Requests are maintained at BatchInsertionControl [refer].
+  * Retuens list of responses for each BigQuery table batch insertion
+  */
+  public ArrayList<InsertAllResponse> processBatchInsertion(BatchInsertionControl insertionControl){
+    if( insertionControl.isBufferable() ){
+      insertionControl.buffer(this.data);
+      System.out.println(insertionControl.toString());
+    }else{
+      HashMap<String, HashMap<String,ArrayList<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
+      ArrayList<InsertAllResponse> responses =  new ArrayList<>();
+      try{
 
+        for (String dataset : bufferedRequests.keySet()) {
+          for (String table : bufferedRequests.get(dataset).keySet()){
+            ArrayList<JSONObject> rawInsertRequest = bufferedRequests.get(dataset).get(table);
+            InsertAllRequest bqInsertRequest = this.prepareBigQueryInsertRequestFromBuffer(rawInsertRequest);
+            InsertAllResponse response = bigquery.insertAll(bqInsertRequest);
+            if (response.hasErrors()) {
+              logger.error("Error inserting data: " + response);
+            }else {
+              logger.info("Inserted : " + response);
+            }
+            responses.add(response);
+          }
+        }
+      }catch(BigQueryException e){
+        logger.error("[INSERT_TABLE_ERROR]: " + e);
+      }
+      insertionControl.cleanup();
 
+      return responses;
+    }
+    return null;
+  }
+  /*
+  * Single Api call for each raw event from rabbitmq
+  * [depricated]
+  */
   public InsertAllResponse insertAll() {
     InsertAllRequest request = this.prepareBigQueryInsertRequest(this.data);
     InsertAllResponse response = bigquery.insertAll(request);
+    
     if (response.hasErrors()) {
       logger.error("Error inserting data: " + response);
     }else {

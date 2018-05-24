@@ -1,36 +1,61 @@
 package com.coverfox.bitserv;
 
-import com.google.cloud.bigquery.InsertAllRequest;
 import org.json.JSONObject;
-
 import java.util.HashMap;
+import java.util.Map;
+import java.util.ArrayList;
+
 
 
 class Buffer{
-  private HashMap<String, InsertAllRequest> buffer;
-  
+  // {dataset : {table : [ requestString ] } }
+  private HashMap<String, HashMap<String,ArrayList<JSONObject>>> buffer;
+  private int totalEventsCached = 0;
+
   public Buffer(){
-    this.buffer = new HashMap<String, InsertAllRequest>();
+    this.buffer = new HashMap<>();
   }
   public void flush(){
+    totalEventsCached = 0;
     this.buffer.clear();
   }
-  public int getTotalMessages(){
-    return this.buffer.size();
+  public String toString(){
+    HashMap<String,Integer> temp = new HashMap<String,Integer>();
+    for(String dataset : this.buffer.keySet()){
+      for(String table : this.buffer.get(dataset).keySet() ){
+        temp.put(table,this.buffer.get(dataset).get(table).size());
+      }
+    }
+    return temp.toString();
   }
-  public void add( String table,InsertAllRequest request){
-    this.buffer.put(table,request);
+  public int getTotalEventsCached(){
+    return totalEventsCached;
+  }
+  public void add(String dataset, String table, JSONObject request){
+    Map<String, ArrayList<JSONObject>> datasetBuffer;
+    if(!this.buffer.containsKey(dataset)){
+      this.buffer.put(dataset,new HashMap<String,ArrayList<JSONObject>>());
+    }
+    datasetBuffer = this.buffer.get(dataset);
+    if(!datasetBuffer.containsKey(table)){
+      datasetBuffer.put(table,new ArrayList<JSONObject>());
+    }
+    datasetBuffer.get(table).add(request);
+    this.totalEventsCached += 1;
+  }
+  public HashMap getCachedRequests(){
+    return this.buffer;
   }
 }
 
 // singleton
 public class BatchInsertionControl{
-  public static final int MAX_BUFFER_SIZE = 100;  // in messages
-  public static final int MAX_BUFFER_TIME = 10;   // in seconds
-  public static int lastInsertedTime;
-  public static Buffer buffer;
-  private static BatchInsertionControl instance = null;
+  private static final int MAX_BUFFER_SIZE = 100;  // in messages
+  private static final int MAX_BUFFER_TIME = 10;   // in seconds
+  private static int lastInsertedTime;
+  private static Buffer buffer;
   
+  private static BatchInsertionControl instance = null;
   public static BatchInsertionControl getInstance(){
     if (instance == null) {
       instance = new BatchInsertionControl();
@@ -41,21 +66,24 @@ public class BatchInsertionControl{
   private BatchInsertionControl(){
     this.buffer = new Buffer();
   }
-  public String toString() {
-    return getClass().getName() + "@" + Integer.toHexString(hashCode());
+  private boolean timerExpired(){
+    return false;
   }
+  public String toString(){
+    return this.buffer.toString();
+  }
+  // apis
   public boolean isBufferable(){
-    if( this.buffer.getTotalMessages() < MAX_BUFFER_SIZE && !this.timerExpired() ) return true;
+    if( this.buffer.getTotalEventsCached() < MAX_BUFFER_SIZE && !this.timerExpired() ) return true;
     return false;
   }
-  public boolean timerExpired(){
-    return false;
+  public void buffer(JSONObject data){ // check duplication ???
+    String dataset = data.getJSONObject("schema").getString("dataset");
+    String table = data.getJSONObject("schema").getString("name");
+    this.buffer.add(dataset, table, data); // remove cahching unwanted data
   }
-  // check duplication ???
-  public void buffer(JSONObject data,InsertAllRequest request){
-    String dataset = data.getString("dataset");
-    String table = data.getString("name");
-    this.buffer.add(table,request); // add dataset also
+  public HashMap<String, HashMap<String,ArrayList<JSONObject>>>  getBufferedRequests(){
+    return this.buffer.getCachedRequests();
   }
   public void cleanup(){
     this.buffer.flush();
