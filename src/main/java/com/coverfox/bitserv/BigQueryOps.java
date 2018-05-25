@@ -20,7 +20,6 @@ import com.google.cloud.bigquery.Dataset;
 import com.google.cloud.bigquery.DatasetInfo;
 import com.google.cloud.bigquery.Field;
 import com.google.cloud.bigquery.InsertAllRequest;
-import com.google.cloud.bigquery.InsertAllRequest.Builder;
 import com.google.cloud.bigquery.InsertAllResponse;
 import com.google.cloud.bigquery.Schema;
 import com.google.cloud.bigquery.StandardTableDefinition;
@@ -115,12 +114,10 @@ public class BigQueryOps {
     String datasetName = jTableSchema.getString("dataset");
     String tableName = jTableSchema.getString("name");
     TableId tableId = TableId.of(datasetName, tableName);
-
     Iterator<?> jRows = jTableSchema.getJSONArray("rows").iterator();
     JSONObject jRow = null;
     String insertId = null;
     InsertAllRequest.Builder rowBuilder =  InsertAllRequest.newBuilder(tableId);
-
     while (jRows.hasNext()) {
       jRow = (JSONObject) jRows.next();
       insertId = jRow.getString("insertId");
@@ -138,7 +135,6 @@ public class BigQueryOps {
     String tableName = jTableSchema.getString("name");
     TableId tableId = TableId.of(datasetName, tableName);
     InsertAllRequest.Builder rowBuilder =  InsertAllRequest.newBuilder(tableId);
-
     JSONObject jRow = null;
     String insertId = null;
     for(JSONObject bufferedRequest : bufferedRequests){
@@ -152,6 +148,13 @@ public class BigQueryOps {
     }
     return rowBuilder.build();
   }
+  private void sleep(int time){
+    try{
+      Thread.sleep(time);
+    }catch(InterruptedException ex) {
+      Thread.currentThread().interrupt();
+    }
+  }
   /*
   * Makes Api call for batch of raw events from rabbitmq.
   * Cached Requests are maintained at BatchInsertionControl [refer].
@@ -162,10 +165,10 @@ public class BigQueryOps {
       insertionControl.buffer(this.data);
       System.out.println(insertionControl.toString());
     }else{
+      // sleep(1000);
       HashMap<String, HashMap<String,ArrayList<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
       ArrayList<InsertAllResponse> responses =  new ArrayList<>();
       try{
-
         for (String dataset : bufferedRequests.keySet()) {
           for (String table : bufferedRequests.get(dataset).keySet()){
             ArrayList<JSONObject> rawInsertRequest = bufferedRequests.get(dataset).get(table);
@@ -183,19 +186,17 @@ public class BigQueryOps {
         logger.error("[INSERT_TABLE_ERROR]: " + e);
       }
       insertionControl.cleanup();
-
       return responses;
     }
     return null;
   }
   /*
   * Single Api call for each raw event from rabbitmq
-  * [depricated]
+  * [DEPRICATED]
   */
   public InsertAllResponse insertAll() {
     InsertAllRequest request = this.prepareBigQueryInsertRequest(this.data);
     InsertAllResponse response = bigquery.insertAll(request);
-    
     if (response.hasErrors()) {
       logger.error("Error inserting data: " + response);
     }else {
