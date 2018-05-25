@@ -15,7 +15,18 @@ public class ActionHandler {
     this.message = new JSONObject(message);
     insertionControl = BatchInsertionControl.getInstance(); // do bufferring or know when to perform insertion
   }
-
+  public static void dispatchEvent(String event){
+    switch(event) {
+      case "insert.cache.dispatch":
+        // cornor case : wait for consumer thread to complete processing the current messages. if any
+        BigQueryOps.dispatchBatchInsertions(insertionControl);
+        System.out.println(insertionControl.toString());
+        break;
+      default:
+        logger.error("iEvent: [" + event + "] not found");
+        break;
+    }
+  }
   public void handle() {
     String target = this.message.getString("target");
     String action = this.message.getString("action");

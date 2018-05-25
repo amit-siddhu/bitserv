@@ -129,7 +129,7 @@ public class BigQueryOps {
   /*
   * For each table, accumulated raw insert requests are converted to BigQuery request objects
   */
-  public InsertAllRequest prepareBigQueryInsertRequestFromBuffer(ArrayList<JSONObject> bufferedRequests) {
+  public static InsertAllRequest prepareBigQueryInsertRequestFromBuffer(ArrayList<JSONObject> bufferedRequests) {
     JSONObject jTableSchema = bufferedRequests.get(0).getJSONObject("schema");
     String datasetName = jTableSchema.getString("dataset");
     String tableName = jTableSchema.getString("name");
@@ -155,37 +155,42 @@ public class BigQueryOps {
       Thread.currentThread().interrupt();
     }
   }
+  public static ArrayList<InsertAllResponse> dispatchBatchInsertions(BatchInsertionControl insertionControl){
+    HashMap<String, HashMap<String,ArrayList<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
+    ArrayList<InsertAllResponse> responses =  new ArrayList<>();
+    try{
+      for (String dataset : bufferedRequests.keySet()) {
+        for (String table : bufferedRequests.get(dataset).keySet()){
+          ArrayList<JSONObject> rawInsertRequest = bufferedRequests.get(dataset).get(table);
+          InsertAllRequest bqInsertRequest = prepareBigQueryInsertRequestFromBuffer(rawInsertRequest);
+          InsertAllResponse response = bigquery.insertAll(bqInsertRequest); // [TODO : replay api]
+          if (response.hasErrors()) {
+            logger.error("Error inserting data: " + response);
+          }else {
+            logger.info("Inserted : " + response);
+          }
+          responses.add(response);
+        }
+      }
+    }catch(BigQueryException e){
+      logger.error("[INSERT_TABLE_ERROR]: " + e);
+    }
+    insertionControl.cleanup();
+    return responses;
+  }
   /*
   * Makes Api call for batch of raw events from rabbitmq.
   * Cached Requests are maintained at BatchInsertionControl [refer].
   * Retuens list of responses for each BigQuery table batch insertion
   */
   public ArrayList<InsertAllResponse> processBatchInsertion(BatchInsertionControl insertionControl){
-    if( insertionControl.isBufferable() ){
+    if( insertionControl.isBufferable()) {
       insertionControl.buffer(this.data);
       System.out.println(insertionControl.toString());
     }else{
       // sleep(1000);
-      HashMap<String, HashMap<String,ArrayList<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
-      ArrayList<InsertAllResponse> responses =  new ArrayList<>();
-      try{
-        for (String dataset : bufferedRequests.keySet()) {
-          for (String table : bufferedRequests.get(dataset).keySet()){
-            ArrayList<JSONObject> rawInsertRequest = bufferedRequests.get(dataset).get(table);
-            InsertAllRequest bqInsertRequest = this.prepareBigQueryInsertRequestFromBuffer(rawInsertRequest);
-            InsertAllResponse response = bigquery.insertAll(bqInsertRequest);
-            if (response.hasErrors()) {
-              logger.error("Error inserting data: " + response);
-            }else {
-              logger.info("Inserted : " + response);
-            }
-            responses.add(response);
-          }
-        }
-      }catch(BigQueryException e){
-        logger.error("[INSERT_TABLE_ERROR]: " + e);
-      }
-      insertionControl.cleanup();
+      ArrayList<InsertAllResponse> responses = dispatchBatchInsertions(insertionControl); // static method
+      insertionControl.buffer(this.data);
       return responses;
     }
     return null;

@@ -52,13 +52,26 @@ public class BitservApp {
       public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
           throws IOException {
         String message = new String(body, "UTF-8");
-        logger.info("[X] Message received: " + message);
+        // logger.info("[X] Message received: " + message);
         new ActionHandler(message).handle();
 
       }
     };
     channel.basicConsume(args.getrmQueue(), true, consumer);
     logger.info("Bitserv connected to BigQuery");
+    /*
+    * handle SIGTERM & SIGINT
+    */
+    Runtime.getRuntime().addShutdownHook(new Thread()
+    {
+      @Override
+      public void run()
+      {
+        System.out.println("[gracefull shutdown]  Shutdown begin...");
+        ActionHandler.dispatchEvent("insert.cache.dispatch");
+        System.out.println("[gracefull shutdown]  Shutdown hook ran!");
+      }
+    });
   }
 }
 
