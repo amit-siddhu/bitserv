@@ -22,16 +22,10 @@ public class ActionHandler {
   }
   public static void dispatchEvent(String event){
     switch(event) {
-      case "insert.buffer.dispatch":
-        // cornor case : wait for consumer thread to complete processing the current messages. if any
+      case "insert.buffer.dispatch": // thread safe operation
         System.out.println("Found reminent requests : " + insertionControl.toString());
         BigQueryOps.dispatchBatchInsertions(insertionControl);
         System.out.println("After dispatch, reminent requests : " + insertionControl.toString());
-        break;
-      case "set.buffer.dispatchFlag":
-        // cornor case : wait for consumer thread to complete processing the current messages. if any
-        System.out.println("Trigger Timer-Dispatch-Event");
-        insertionControl.setTimerDispatched();
         break;
       default:
         logger.error("iEvent: [" + event + "] not found");

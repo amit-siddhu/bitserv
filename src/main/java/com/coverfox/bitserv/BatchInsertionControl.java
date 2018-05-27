@@ -11,7 +11,6 @@ class Buffer{
   // {dataset : {table : [ requestString ] } }
   private HashMap<String, HashMap<String,ArrayList<JSONObject>>> buffer;
   private int totalEventsCached = 0;
-
   public Buffer(){
     this.buffer = new HashMap<>();
   }
@@ -52,11 +51,7 @@ class Buffer{
 public class BatchInsertionControl{
   public static final int MAX_BUFFER_SIZE = 100;  // in messages
   public static final int MAX_BUFFER_TIME = 10;   // in seconds
-
-  private boolean TIMER_DISPATCHED_FLAG = false;   // eventually dispatching the insert requests
-
   private static Buffer buffer;
-  
   private static BatchInsertionControl instance = null;
   public static BatchInsertionControl getInstance(){
     if (instance == null) {
@@ -64,23 +59,14 @@ public class BatchInsertionControl{
     }
     return instance;
   }
-
   private BatchInsertionControl(){
     this.buffer = new Buffer();
-  }
-  private boolean timerEventDispatched(){
-    return this.TIMER_DISPATCHED_FLAG;
   }
   public String toString(){
     return this.buffer.toString();
   }
-
-  // apis
-  public void setTimerDispatched(){
-    this.TIMER_DISPATCHED_FLAG = true;
-  }
   public boolean isBufferable(){
-    if( this.buffer.getTotalEventsCached() < MAX_BUFFER_SIZE && !this.timerEventDispatched()) return true;
+    if( this.buffer.getTotalEventsCached() < MAX_BUFFER_SIZE ) return true;
     return false;
   }
   public void buffer(JSONObject data){
