@@ -68,7 +68,7 @@ public class BitservApp {
       public void run()
       {
         System.out.println("[gracefull shutdown]  Shutdown begin...");
-        ActionHandler.dispatchEvent("insert.cache.dispatch");
+        ActionHandler.dispatchEvent("insert.buffer.dispatch");
         System.out.println("[gracefull shutdown]  Shutdown hook ran!");
       }
     });

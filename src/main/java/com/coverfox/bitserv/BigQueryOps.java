@@ -146,6 +146,7 @@ public class BigQueryOps {
         rowBuilder.addRow(insertId, row);
       }
     }
+    logger.info("batch.dispatch : "+ datasetName +","+ tableName + " : " + bufferedRequests.size());
     return rowBuilder.build();
   }
   private void sleep(int time){
@@ -186,11 +187,14 @@ public class BigQueryOps {
   public ArrayList<InsertAllResponse> processBatchInsertion(BatchInsertionControl insertionControl){
     if( insertionControl.isBufferable()) {
       insertionControl.buffer(this.data);
-      System.out.println(insertionControl.toString());
+      // System.out.println(insertionControl.toString());
+      // sleep(500);
     }else{
-      // sleep(1000);
+      sleep(3000);
+      System.out.println(insertionControl.toString());
       ArrayList<InsertAllResponse> responses = dispatchBatchInsertions(insertionControl); // static method
       insertionControl.buffer(this.data);
+      System.out.println(insertionControl.toString());
       return responses;
     }
     return null;

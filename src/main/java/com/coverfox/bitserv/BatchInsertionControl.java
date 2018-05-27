@@ -50,9 +50,11 @@ class Buffer{
 
 // singleton
 public class BatchInsertionControl{
-  private static final int MAX_BUFFER_SIZE = 100;  // in messages
-  private static final int MAX_BUFFER_TIME = 10;   // in seconds
-  private static int lastInsertedTime;
+  public static final int MAX_BUFFER_SIZE = 100;  // in messages
+  public static final int MAX_BUFFER_TIME = 10;   // in seconds
+
+  private boolean TIMER_DISPATCHED_FLAG = false;   // eventually dispatching the insert requests
+
   private static Buffer buffer;
   
   private static BatchInsertionControl instance = null;
@@ -66,21 +68,25 @@ public class BatchInsertionControl{
   private BatchInsertionControl(){
     this.buffer = new Buffer();
   }
-  private boolean timerExpired(){
-    return false;
+  private boolean timerEventDispatched(){
+    return this.TIMER_DISPATCHED_FLAG;
   }
   public String toString(){
     return this.buffer.toString();
   }
+
   // apis
+  public void setTimerDispatched(){
+    this.TIMER_DISPATCHED_FLAG = true;
+  }
   public boolean isBufferable(){
-    if( this.buffer.getTotalEventsCached() < MAX_BUFFER_SIZE && !this.timerExpired() ) return true;
+    if( this.buffer.getTotalEventsCached() < MAX_BUFFER_SIZE && !this.timerEventDispatched()) return true;
     return false;
   }
-  public void buffer(JSONObject data){ // check duplication ???
+  public void buffer(JSONObject data){
     String dataset = data.getJSONObject("schema").getString("dataset");
     String table = data.getJSONObject("schema").getString("name");
-    this.buffer.add(dataset, table, data); // remove cahching unwanted data
+    this.buffer.add(dataset, table, data);
   }
   public HashMap<String, HashMap<String,ArrayList<JSONObject>>>  getBufferedRequests(){
     return this.buffer.getCachedRequests();
