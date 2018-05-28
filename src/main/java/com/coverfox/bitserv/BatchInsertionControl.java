@@ -10,7 +10,8 @@ import java.util.ArrayList;
 class Buffer{
   // {dataset : {table : [ requestString ] } }
   private HashMap<String, HashMap<String,ArrayList<JSONObject>>> buffer;
-  private int totalEventsCached = 0;
+  private int totalEventsCached = 0; // current number of events in buffer
+  public int totalEventsDispatched = 0;
   public Buffer(){
     this.buffer = new HashMap<>();
   }
@@ -41,6 +42,7 @@ class Buffer{
     }
     datasetBuffer.get(table).add(request);
     this.totalEventsCached += 1;
+    this.totalEventsDispatched += 1;
   }
   public HashMap getCachedRequests(){
     return this.buffer;
@@ -50,8 +52,8 @@ class Buffer{
 // singleton
 public class BatchInsertionControl{
   public static final int MAX_BUFFER_SIZE = 100;  // in messages
-  public static final int MAX_BUFFER_TIME = 10;   // in seconds
-  private static Buffer buffer;
+  public static final int MAX_BUFFER_TIME = 60;   // in seconds
+  private Buffer buffer;
   private static BatchInsertionControl instance = null;
   public static BatchInsertionControl getInstance(){
     if (instance == null) {
@@ -61,6 +63,9 @@ public class BatchInsertionControl{
   }
   private BatchInsertionControl(){
     this.buffer = new Buffer();
+  }
+  public int getEventsDispatchedCount(){
+    return this.buffer.totalEventsDispatched;
   }
   public String toString(){
     return this.buffer.toString();

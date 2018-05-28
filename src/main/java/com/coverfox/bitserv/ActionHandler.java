@@ -23,9 +23,13 @@ public class ActionHandler {
   public static void dispatchEvent(String event){
     switch(event) {
       case "insert.buffer.dispatch": // thread safe operation
-        System.out.println("Found reminent requests : " + insertionControl.toString());
+        // System.out.println("Found reminent requests : " + insertionControl.toString());
         BigQueryOps.dispatchBatchInsertions(insertionControl);
-        System.out.println("After dispatch, reminent requests : " + insertionControl.toString());
+        /* System.out.println("After dispatch, reminent requests : " + 
+                            insertionControl.toString() + 
+                            " ; dispatchCount : "+ Integer.toString(insertionControl.getEventsDispatchedCount()) 
+        );
+        */
         break;
       default:
         logger.error("iEvent: [" + event + "] not found");
