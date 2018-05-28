@@ -47,6 +47,9 @@ class Buffer{
   public HashMap getCachedRequests(){
     return this.buffer;
   }
+  public boolean isEmpty(){
+    return this.totalEventsCached == 0;
+  }
 }
 
 // singleton
@@ -73,6 +76,9 @@ public class BatchInsertionControl{
   public boolean isBufferable(){
     if( this.buffer.getTotalEventsCached() < MAX_BUFFER_SIZE ) return true;
     return false;
+  }
+  public boolean dispatchReady(){
+    return !this.buffer.isEmpty();
   }
   public void buffer(JSONObject data){
     String dataset = data.getJSONObject("schema").getString("dataset");

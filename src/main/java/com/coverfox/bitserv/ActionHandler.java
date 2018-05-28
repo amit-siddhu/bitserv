@@ -24,6 +24,7 @@ public class ActionHandler {
     switch(event) {
       case "insert.buffer.dispatch": // thread safe operation
         // System.out.println("Found reminent requests : " + insertionControl.toString());
+        if(insertionControl != null && insertionControl.dispatchReady())
         BigQueryOps.dispatchBatchInsertions(insertionControl);
         /* System.out.println("After dispatch, reminent requests : " + 
                             insertionControl.toString() + 
