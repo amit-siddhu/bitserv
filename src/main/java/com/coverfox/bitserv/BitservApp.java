@@ -10,10 +10,14 @@ import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.ExceptionHandler;
+// import com.rabbitmq.client.ShutdownSignalException;
 import com.rabbitmq.client.impl.DefaultExceptionHandler;
 import java.io.IOException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.Timer;
+import java.util.TimerTask;
 
 public class BitservApp {
 
@@ -50,16 +54,25 @@ public class BitservApp {
     channel.queueDeclare(args.getrmQueue(), true, false, false, null);
     logger.info("Bitserv connected to RabbitMQ");
 
+    // maintain order
+    BatchInsertionControl insertionControl = BatchInsertionControl.getInstance(args.getrmBufferSize());
+    BatchInsertionTimer.initTimer(args.getrmBufferTime());
+    ActionHandler.initStaticDependecies(insertionControl);
+
     Consumer consumer = new DefaultConsumer(channel) {
       @Override
       public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
           throws IOException {
         String message = new String(body, "UTF-8");
         // remove this comment for prod : needs logging in prod
-        logger.info("[X] Message received: " + message);
+        // logger.info("[X] Message received: " + message);
         new ActionHandler(message).handle();
 
       }
+      // @Override
+      // public void handleShutdownSignal(String consumerTag, ShutdownSignalException sig) {
+      //   ActionHandler.dispatchEvent("insert.buffer.dispatch","SHUTDOWN-CONSUMER");
+      // }
     };
     channel.basicConsume(args.getrmQueue(), true, consumer);
     logger.info("Bitserv connected to BigQuery");
@@ -72,7 +85,7 @@ public class BitservApp {
       public void run()
       {
         System.out.println("[gracefull shutdown]  Shutdown begin...");
-        ActionHandler.dispatchEvent("insert.buffer.dispatch");
+        ActionHandler.dispatchEvent("insert.buffer.dispatch","SHUTDOWN-VM");
         System.out.println("[gracefull shutdown]  Shutdown hook ran!");
       }
     });
@@ -98,6 +111,12 @@ class Args {
   @Parameter(names = "-rmVhost", description = "RabbitMQ virtual host")
   private String rmVhost = "/";
 
+  @Parameter(names = "-rmBufferSize", description = "Insertion Buffer Size")
+  private Integer rmBufferSize = 20; // in messages
+
+  @Parameter(names = "-rmBufferTime", description = "Insertion Buffer Time")
+  private Integer rmBufferTime = 10; // in seconds
+
   public String getrmHost() {
     return this.rmHost;
   }
@@ -120,5 +139,36 @@ class Args {
 
   public String getrmVhost() {
     return this.rmVhost;
+  }
+
+  public Integer getrmBufferSize() {
+    return this.rmBufferSize;
+  }
+
+  public Integer getrmBufferTime() {
+    return this.rmBufferTime;
+  }
+}
+
+class BatchInsertionTimer {
+  private Timer timer;
+  private BatchInsertionTimer(int seconds) {
+    this.timer = new Timer();
+    this.tick(seconds);
+  }
+  private void tick(int seconds){
+    this.timer.schedule(new TimerTask() {
+      @Override
+      public void run() {
+        ActionHandler.dispatchEvent("insert.buffer.dispatch","TIMER");
+      }
+    }, seconds*1000,seconds*1000);
+  }
+  private static BatchInsertionTimer instance = null;
+  public static BatchInsertionTimer initTimer(int seconds){
+    if (instance == null){
+      instance = new BatchInsertionTimer(seconds);
+    }
+    return instance;
   }
 }

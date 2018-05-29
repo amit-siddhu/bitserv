@@ -54,18 +54,18 @@ class Buffer{
 
 // singleton
 public class BatchInsertionControl{
-  public static final int MAX_BUFFER_SIZE = 100;  // in messages
-  public static final int MAX_BUFFER_TIME = 60;   // in seconds
+  private Integer bufferSize;// in messages
   private Buffer buffer;
   private static BatchInsertionControl instance = null;
-  public static BatchInsertionControl getInstance(){
+  public static BatchInsertionControl getInstance(Integer bufferSize){
     if (instance == null) {
-      instance = new BatchInsertionControl();
+      instance = new BatchInsertionControl(bufferSize);
     }
     return instance;
   }
-  private BatchInsertionControl(){
+  private BatchInsertionControl(Integer bufferSize){
     this.buffer = new Buffer();
+    this.bufferSize = bufferSize;
   }
   public int getEventsDispatchedCount(){
     return this.buffer.totalEventsDispatched;
@@ -74,7 +74,7 @@ public class BatchInsertionControl{
     return this.buffer.toString();
   }
   public boolean isBufferable(){
-    if( this.buffer.getTotalEventsCached() < MAX_BUFFER_SIZE ) return true;
+    if( this.buffer.getTotalEventsCached() < this.bufferSize ) return true;
     return false;
   }
   public boolean dispatchReady(){

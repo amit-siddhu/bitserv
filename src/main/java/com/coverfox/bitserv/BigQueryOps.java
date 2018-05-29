@@ -158,30 +158,28 @@ public class BigQueryOps {
     }
   }
   public static ArrayList<InsertAllResponse> dispatchBatchInsertions(BatchInsertionControl insertionControl){
-    synchronized(LOCK){
-      HashMap<String, HashMap<String,ArrayList<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
-      ArrayList<InsertAllResponse> responses =  new ArrayList<>();
-      try{
-        for (String dataset : bufferedRequests.keySet()) {
-          for (String table : bufferedRequests.get(dataset).keySet()){
-            ArrayList<JSONObject> rawInsertRequest = bufferedRequests.get(dataset).get(table);
-            InsertAllRequest bqInsertRequest = prepareBigQueryInsertRequestFromBuffer(rawInsertRequest);
-            InsertAllResponse response = bigquery.insertAll(bqInsertRequest); // [TODO : add generic replay api]
-            if (response.hasErrors()) {
-              logger.error("Error inserting data: " + response);
-              response = bigquery.insertAll(bqInsertRequest);
-            }else {
-              logger.info("Inserted : " + response);
-            }
-            responses.add(response);
+    HashMap<String, HashMap<String,ArrayList<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
+    ArrayList<InsertAllResponse> responses =  new ArrayList<>();
+    try{
+      for (String dataset : bufferedRequests.keySet()) {
+        for (String table : bufferedRequests.get(dataset).keySet()){
+          ArrayList<JSONObject> rawInsertRequest = bufferedRequests.get(dataset).get(table);
+          InsertAllRequest bqInsertRequest = prepareBigQueryInsertRequestFromBuffer(rawInsertRequest);
+          InsertAllResponse response = bigquery.insertAll(bqInsertRequest); // [TODO : add generic replay api]
+          if (response.hasErrors()) {
+            logger.error("Error inserting data: " + response);
+            response = bigquery.insertAll(bqInsertRequest);
+          }else {
+            logger.info("Inserted : " + response);
           }
+          responses.add(response);
         }
-      }catch(BigQueryException e){
-        logger.error("[INSERT_TABLE_ERROR]: " + e);
       }
-      insertionControl.cleanup();
-      return responses;
+    }catch(BigQueryException e){
+      logger.error("[INSERT_TABLE_ERROR]: " + e);
     }
+    insertionControl.cleanup();
+    return responses;
   }
   /*
   * Makes Api call for batch of raw events from rabbitmq.
