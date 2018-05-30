@@ -49,12 +49,9 @@ public class BitservApp {
     Connection connection = factory.newConnection();
     Channel channel = connection.createChannel();
 
-    // change this config to make the queue durable upon consumer cancellation (case: ctrl+c)
-    // refer : http://www.rabbitmq.com/amqp-0-9-1-quickref.html#queue.declare
     channel.queueDeclare(args.getrmQueue(), true, false, false, null);
     logger.info("Bitserv connected to RabbitMQ");
 
-    // maintain order
     BatchInsertionControl insertionControl = BatchInsertionControl.getInstance(args.getrmBufferSize());
     BatchInsertionTimer.initTimer(args.getrmBufferTime());
     ActionHandler.initStaticDependecies(insertionControl);
@@ -64,8 +61,7 @@ public class BitservApp {
       public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
           throws IOException {
         String message = new String(body, "UTF-8");
-        // remove this comment for prod : needs logging in prod
-        // logger.info("[X] Message received: " + message);
+        logger.info("[X] Message received: " + message);
         new ActionHandler(message).handle();
 
       }

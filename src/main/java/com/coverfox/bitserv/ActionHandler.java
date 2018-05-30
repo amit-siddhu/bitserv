@@ -6,14 +6,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public class ActionHandler {
-  // debugging purposr
-  private static void sleep(int time){
-    try{
-      Thread.sleep(time * 1000);
-    }catch(InterruptedException ex) {
-      Thread.currentThread().interrupt();
-    }
-  }
   private static final Logger logger = LogManager.getLogger(BigQueryOps.class);
   private JSONObject message;
   private static BatchInsertionControl insertionControl;
@@ -28,17 +20,10 @@ public class ActionHandler {
   }
   public static void dispatchEvent(String event,String source){
     switch(event) {
-      case "insert.buffer.dispatch": // thread safe operation
-        // System.out.println("***["+source+"]*** EVENT");
+      case "insert.buffer.dispatch":
         if(insertionControl != null && insertionControl.dispatchReady()){
           synchronized(LOCK){
-            // System.out.println("***["+source+"]*** LOCK");
-            // System.out.println("Found reminent requests : " + insertionControl.toString());
-            // ActionHandler.sleep(3);
             BigQueryOps.dispatchBatchInsertions(insertionControl);
-            // System.out.println("After dispatch, reminent requests : " + insertionControl.toString() + " ; dispatchCount : "+ Integer.toString(insertionControl.getEventsDispatchedCount()) );
-            // System.out.println("***["+source+"]*** UNLOCK");
-
           }
         }
         break;
@@ -78,10 +63,7 @@ public class ActionHandler {
             break;
           case "insert":
             synchronized(LOCK){
-              // System.out.println("***[RABBITMQ]*** LOCK");
               new BigQueryOps(this.message.getJSONObject("data")).processBatchInsertion(insertionControl);
-              // System.out.println("***[RABBITMQ]*** UNLOCK");
-
             }
             break;
           case "delete":
