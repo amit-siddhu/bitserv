@@ -149,17 +149,9 @@ public class BigQueryOps {
     logger.info("batch.dispatch : "+ datasetName +","+ tableName + " : " + bufferedRequests.size());
     return rowBuilder.build();
   }
-   private static void sleep(int time){
-    try{
-      Thread.sleep(time * 1000);
-    }catch(InterruptedException ex) {
-      Thread.currentThread().interrupt();
-    }
-  }
   public static ArrayList<InsertAllResponse> makeInsertApiCall(InsertAllRequest request,ArrayList<InsertAllResponse> responses){
     try{
       // System.out.println("***[API CALL]***");
-      // sleep(10);
       InsertAllResponse response = bigquery.insertAll(request);
       if (response.hasErrors()) {
         logger.error("Error inserting data: " + response);
@@ -191,7 +183,6 @@ public class BigQueryOps {
         ArrayList<JSONObject> rawInsertRequest = bufferedRequests.get(dataset).get(table);
         InsertAllRequest bqInsertRequest = prepareBigQueryInsertRequestFromBuffer(rawInsertRequest);
         responses = makeInsertApiCall(bqInsertRequest,responses);
-        // System.out.println(insertionControl.toString() + " | " + insertionControl.getEventsDispatchedCount());
       }
     }
     insertionControl.cleanup();
