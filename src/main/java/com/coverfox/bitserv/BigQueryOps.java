@@ -150,26 +150,50 @@ public class BigQueryOps {
     logger.info("batch.dispatch : "+ datasetName +","+ tableName + " : " + bufferedRequests.size());
     return rowBuilder.build();
   }
+   private static void sleep(int time){
+    try{
+      Thread.sleep(time * 1000);
+    }catch(InterruptedException ex) {
+      Thread.currentThread().interrupt();
+    }
+  }
+  public static ArrayList<InsertAllResponse> makeInsertApiCall(InsertAllRequest request,ArrayList<InsertAllResponse> responses){
+    try{
+      // System.out.println("***[API CALL]***");
+      // sleep(10);
+      InsertAllResponse response = bigquery.insertAll(request);
+      if (response.hasErrors()) {
+        logger.error("Error inserting data: " + response);
+      }else {
+        logger.info("Inserted : " + response);
+      }
+      responses.add(response);
+    }catch(BigQueryException e){
+      try{
+        // System.out.println("***[API CALL 2]***");
+        InsertAllResponse response = bigquery.insertAll(request);
+        if (response.hasErrors()) {
+          logger.error("Error inserting data: " + response);
+        }else {
+          logger.info("Inserted : " + response);
+        }
+        responses.add(response);
+      }catch(BigQueryException ex){
+        logger.error("[INSERT_TABLE_ERROR]: " + ex);
+      }
+    }
+    return responses;
+  }
   public static ArrayList<InsertAllResponse> dispatchBatchInsertions(BatchInsertionControl insertionControl){
     HashMap<String, HashMap<String,ArrayList<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
     ArrayList<InsertAllResponse> responses =  new ArrayList<>();
-    try{
-      for (String dataset : bufferedRequests.keySet()) {
-        for (String table : bufferedRequests.get(dataset).keySet()){
-          ArrayList<JSONObject> rawInsertRequest = bufferedRequests.get(dataset).get(table);
-          InsertAllRequest bqInsertRequest = prepareBigQueryInsertRequestFromBuffer(rawInsertRequest);
-          InsertAllResponse response = bigquery.insertAll(bqInsertRequest); // [TODO : add generic replay api]
-          if (response.hasErrors()) {
-            logger.error("Error inserting data: " + response);
-            response = bigquery.insertAll(bqInsertRequest);
-          }else {
-            logger.info("Inserted : " + response);
-          }
-          responses.add(response);
-        }
+    for (String dataset : bufferedRequests.keySet()) {
+      for (String table : bufferedRequests.get(dataset).keySet()){
+        ArrayList<JSONObject> rawInsertRequest = bufferedRequests.get(dataset).get(table);
+        InsertAllRequest bqInsertRequest = prepareBigQueryInsertRequestFromBuffer(rawInsertRequest);
+        responses = makeInsertApiCall(bqInsertRequest,responses);
+        // System.out.println(insertionControl.toString() + " | " + insertionControl.getEventsDispatchedCount());
       }
-    }catch(BigQueryException e){
-      logger.error("[INSERT_TABLE_ERROR]: " + e);
     }
     insertionControl.cleanup();
     return responses;
@@ -183,7 +207,7 @@ public class BigQueryOps {
     if( insertionControl.isBufferable()) {
       insertionControl.buffer(this.data);
     }else{
-      ArrayList<InsertAllResponse> responses = dispatchBatchInsertions(insertionControl); // static method
+      ArrayList<InsertAllResponse> responses = dispatchBatchInsertions(insertionControl);
       insertionControl.buffer(this.data);
       return responses;
     }

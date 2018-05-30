@@ -10,12 +10,12 @@ import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.ExceptionHandler;
-// import com.rabbitmq.client.ShutdownSignalException;
 import com.rabbitmq.client.impl.DefaultExceptionHandler;
-import java.io.IOException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
+import java.util.concurrent.TimeoutException;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -53,7 +53,7 @@ public class BitservApp {
     logger.info("Bitserv connected to RabbitMQ");
 
     BatchInsertionControl insertionControl = BatchInsertionControl.getInstance(args.getrmBufferSize());
-    BatchInsertionTimer.initTimer(args.getrmBufferTime());
+    Timer timer = BatchInsertionTimer.initTimer(args.getrmBufferTime());
     ActionHandler.initStaticDependecies(insertionControl);
 
     Consumer consumer = new DefaultConsumer(channel) {
@@ -80,6 +80,13 @@ public class BitservApp {
       @Override
       public void run()
       {
+        try{
+          channel.close();
+          connection.close();
+          timer.cancel();
+        }catch( IOException | TimeoutException e ){
+          logger.error("[BITSERVE Shutdown Error] : "+ e.toString());
+        }
         System.out.println("[gracefull shutdown]  Shutdown begin...");
         ActionHandler.dispatchEvent("insert.buffer.dispatch","SHUTDOWN-VM");
         System.out.println("[gracefull shutdown]  Shutdown hook ran!");
@@ -161,10 +168,10 @@ class BatchInsertionTimer {
     }, seconds*1000,seconds*1000);
   }
   private static BatchInsertionTimer instance = null;
-  public static BatchInsertionTimer initTimer(int seconds){
+  public static Timer initTimer(int seconds){
     if (instance == null){
       instance = new BatchInsertionTimer(seconds);
     }
-    return instance;
+    return instance.timer;
   }
 }
