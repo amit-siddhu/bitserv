@@ -33,7 +33,6 @@ public class BigQueryOps {
 
   private static final Logger logger = LogManager.getLogger(BigQueryOps.class);
   private static final BigQuery bigquery = BigQueryOptions.getDefaultInstance().getService();
-  private static final Object LOCK = new Object();
   private JSONObject data;
 
   public BigQueryOps(JSONObject data) {

@@ -9,7 +9,6 @@ public class ActionHandler {
   private static final Logger logger = LogManager.getLogger(BigQueryOps.class);
   private JSONObject message;
   private static BatchInsertionControl insertionControl;
-  private static BatchInsertionTimer timerInstance;
   private static final Object LOCK = new Object();
 
   public ActionHandler(String message) {
