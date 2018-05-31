@@ -10,6 +10,7 @@ import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.ExceptionHandler;
+
 import com.rabbitmq.client.impl.DefaultExceptionHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -56,40 +57,45 @@ public class BitservApp {
     Timer timer = BatchInsertionTimer.initTimer(args.getrmBufferTime());
     ActionHandler.initStaticDependecies(insertionControl);
 
-    Consumer consumer = new DefaultConsumer(channel) {
+    DefaultConsumer consumer = new DefaultConsumer(channel) {
       @Override
       public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
           throws IOException {
         String message = new String(body, "UTF-8");
         logger.info("[X] Message received: " + message);
+        
         new ActionHandler(message).handle();
-
+        
+        long deliveryTag = envelope.getDeliveryTag();
+        channel.basicAck(deliveryTag, false);
       }
-      // @Override
-      // public void handleShutdownSignal(String consumerTag, ShutdownSignalException sig) {
-      //   ActionHandler.dispatchEvent("insert.buffer.dispatch","SHUTDOWN-CONSUMER");
-      // }
     };
-    channel.basicConsume(args.getrmQueue(), true, consumer);
+    channel.basicConsume(args.getrmQueue(), false, consumer);
     logger.info("Bitserv connected to BigQuery");
     /*
-    * handle SIGTERM & SIGINT
+    * handle SIGTERM & SIGINT & SIGHUP
     */
     Runtime.getRuntime().addShutdownHook(new Thread()
     {
       @Override
       public void run()
       {
-        try{
-          channel.close();
-          connection.close();
+        synchronized(ActionHandler.getLock()){
+          System.out.println("[gracefull shutdown]  Shutdown begin...");
+          try{
+            String consumerTag = consumer.getConsumerTag();
+            System.out.println(consumerTag);
+            channel.basicCancel(consumerTag);
+            channel.close();
+            connection.close();
+          }catch( IOException | TimeoutException e ){
+            logger.error("[BITSERVE Shutdown Error] : "+ e.toString());
+          }
           timer.cancel();
-        }catch( IOException | TimeoutException e ){
-          logger.error("[BITSERVE Shutdown Error] : "+ e.toString());
+          ActionHandler.dispatchEvent("unsync.insert.buffer.dispatch","SHUTDOWN-VM");
+          System.out.println("Total inserts in the session : "+ insertionControl.getEventsDispatchedCount());
+          System.out.println("[gracefull shutdown]  Shutdown hook ran!");
         }
-        System.out.println("[gracefull shutdown]  Shutdown begin...");
-        ActionHandler.dispatchEvent("insert.buffer.dispatch","SHUTDOWN-VM");
-        System.out.println("[gracefull shutdown]  Shutdown hook ran!");
       }
     });
   }

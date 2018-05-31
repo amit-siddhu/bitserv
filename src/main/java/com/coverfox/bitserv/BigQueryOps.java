@@ -151,7 +151,6 @@ public class BigQueryOps {
   }
   public static ArrayList<InsertAllResponse> makeInsertApiCall(InsertAllRequest request,ArrayList<InsertAllResponse> responses){
     try{
-      // System.out.println("***[API CALL]***");
       InsertAllResponse response = bigquery.insertAll(request);
       if (response.hasErrors()) {
         logger.error("Error inserting data: " + response);
@@ -161,7 +160,6 @@ public class BigQueryOps {
       responses.add(response);
     }catch(BigQueryException e){
       try{
-        // System.out.println("***[API CALL 2]***");
         InsertAllResponse response = bigquery.insertAll(request);
         if (response.hasErrors()) {
           logger.error("Error inserting data: " + response);

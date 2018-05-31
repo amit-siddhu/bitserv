@@ -17,16 +17,21 @@ public class ActionHandler {
   public static void initStaticDependecies(BatchInsertionControl controlInstance){
     insertionControl = controlInstance;
   }
+  public static Object getLock(){
+    return LOCK;
+  }
   public static void dispatchEvent(String event,String source){
     switch(event) {
       case "insert.buffer.dispatch":
-        // System.out.println("***["+source+" Event]***");
         if(insertionControl != null && insertionControl.dispatchReady()){
           synchronized(LOCK){
-            // System.out.println("***["+source+" LOCK]***");
             BigQueryOps.dispatchBatchInsertions(insertionControl);
-            // System.out.println("***["+source+" UNLOCK]***");
           }
+        }
+        break;
+      case "unsync.insert.buffer.dispatch":
+        if(insertionControl != null && insertionControl.dispatchReady()){
+            BigQueryOps.dispatchBatchInsertions(insertionControl);
         }
         break;
       default:
@@ -64,11 +69,8 @@ public class ActionHandler {
             new BigQueryOps(this.message.getJSONObject("data")).updateTable();
             break;
           case "insert":
-            // System.out.println("***[BITSERVE EVENT]***");
             synchronized(LOCK){
-              // System.out.println("***[BITSERVE LOCK]***");
               new BigQueryOps(this.message.getJSONObject("data")).processBatchInsertion(insertionControl);
-              // System.out.println("***[BITSERVE UNLOCK]***");
             }
             break;
           case "delete":
