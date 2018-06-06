@@ -1,10 +1,12 @@
 package com.coverfox.bitserv;
 
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -27,6 +29,16 @@ import com.google.cloud.bigquery.Table;
 import com.google.cloud.bigquery.TableDefinition;
 import com.google.cloud.bigquery.TableId;
 import com.google.cloud.bigquery.TableInfo;
+
+class BatchBufferLogger{
+  public static Integer count = 0;
+  public static void log(String msg){
+    count++;
+    if(count %100 == 0){
+      System.out.println("[** "+msg+" **] "+Integer.toString(count));
+    }
+  }
+}
 
 
 public class BigQueryOps {
@@ -107,7 +119,6 @@ public class BigQueryOps {
   }
   /*
   * For each table, raw requests (mostly one) are converted to BigQuery request objects
-  * [DEPRICATED]
   */
   public InsertAllRequest prepareBigQueryInsertRequest(JSONObject data) {
     JSONObject jTableSchema = data.getJSONObject("schema");
@@ -146,7 +157,7 @@ public class BigQueryOps {
         rowBuilder.addRow(insertId, row);
       }
     }
-    logger.info("batch.dispatch : "+ datasetName +","+ tableName + " : " + bufferedRequests.size());
+    // System.out.println("batch.dispatch : "+ datasetName +","+ tableName + " : " + bufferedRequests.size());
     return rowBuilder.build();
   }
   public static ArrayList<InsertAllResponse> makeInsertApiCall(InsertAllRequest request,ArrayList<InsertAllResponse> responses){
@@ -155,16 +166,17 @@ public class BigQueryOps {
       if (response.hasErrors()) {
         logger.error("Error inserting data: " + response);
       }else {
-        logger.info("Inserted : " + response);
+        // logger.info("Inserted : " + response);
       }
       responses.add(response);
     }catch(BigQueryException e){
+      logger.error("[INSERT_TABLE_ERROR]: " + e);
       try{
         InsertAllResponse response = bigquery.insertAll(request);
         if (response.hasErrors()) {
           logger.error("Error inserting data: " + response);
         }else {
-          logger.info("Inserted : " + response);
+          // logger.info("Inserted : " + response);
         }
         responses.add(response);
       }catch(BigQueryException ex){
@@ -173,17 +185,48 @@ public class BigQueryOps {
     }
     return responses;
   }
-  public static ArrayList<InsertAllResponse> dispatchBatchInsertions(BatchInsertionControl insertionControl){
-    HashMap<String, HashMap<String,ArrayList<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
+  // replay as batched
+  public static ArrayList<InsertAllResponse> dispatchBatchInsertionsBasedOnSize(BatchInsertionControl insertionControl){
+    HashMap<String, HashMap<String,LinkedList<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
     ArrayList<InsertAllResponse> responses =  new ArrayList<>();
     for (String dataset : bufferedRequests.keySet()) {
       for (String table : bufferedRequests.get(dataset).keySet()){
-        ArrayList<JSONObject> rawInsertRequest = bufferedRequests.get(dataset).get(table);
-        InsertAllRequest bqInsertRequest = prepareBigQueryInsertRequestFromBuffer(rawInsertRequest);
-        responses = makeInsertApiCall(bqInsertRequest,responses);
+        Integer readyBufferedRequests = bufferedRequests.get(dataset).get(table).size();
+        Integer tableLevelBatchSize = insertionControl.getBufferSize();
+        Integer batches = readyBufferedRequests/tableLevelBatchSize;
+        for (int i=0; i< batches; i++ ) { 
+          System.out.println("Batch dispatch based on size : "+ Integer.toString(i) +"  "+Integer.toString(tableLevelBatchSize));
+          ArrayList<JSONObject> rawInsertRequests = multipop(bufferedRequests.get(dataset).get(table),tableLevelBatchSize);//bufferedRequests.get(dataset).get(table);
+          InsertAllRequest bqInsertRequests = prepareBigQueryInsertRequestFromBuffer(rawInsertRequests);
+          responses = makeInsertApiCall(bqInsertRequests,responses);
+        }
       }
     }
-    insertionControl.cleanup();
+    return responses;
+  }
+  private static ArrayList<JSONObject> multipop(LinkedList<JSONObject>requestList, Integer size ){
+    LinkedList<JSONObject> q = requestList;
+    ArrayList<JSONObject> popedRequests = new ArrayList<>();
+    Integer count = 0;
+    while(count < size && q.peek() != null){
+      popedRequests.add(q.pop());
+      count++;
+    }
+    return popedRequests;
+  }
+  public static ArrayList<InsertAllResponse> dispatchBatchInsertionsBasedOnTime(BatchInsertionControl insertionControl){
+    HashMap<String, HashMap<String,LinkedList<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
+    ArrayList<InsertAllResponse> responses =  new ArrayList<>();
+    for (String dataset : bufferedRequests.keySet()) {
+      for (String table : bufferedRequests.get(dataset).keySet()){
+        Integer totalPops = bufferedRequests.get(dataset).get(table).size();
+        if(totalPops > 0){
+          ArrayList<JSONObject> rawInsertRequests = multipop(bufferedRequests.get(dataset).get(table),totalPops);//bufferedRequests.get(dataset).get(table);
+          InsertAllRequest bqInsertRequests = prepareBigQueryInsertRequestFromBuffer(rawInsertRequests);
+          responses = makeInsertApiCall(bqInsertRequests,responses);
+        }
+      }
+    }
     return responses;
   }
   /*
@@ -191,21 +234,20 @@ public class BigQueryOps {
   * Cached Requests are maintained at BatchInsertionControl [refer].
   * Retuens list of responses for each BigQuery table batch insertion
   */
-  public ArrayList<InsertAllResponse> processBatchInsertion(BatchInsertionControl insertionControl){
-    if( insertionControl.isBufferable()) {
+  public ArrayList<InsertAllResponse> insert(BatchInsertionControl insertionControl){
+    try{
+      BatchBufferLogger.log("BUFFER");
       insertionControl.buffer(this.data);
-    }else{
-      ArrayList<InsertAllResponse> responses = dispatchBatchInsertions(insertionControl);
-      insertionControl.buffer(this.data);
-      return responses;
+    }catch(Exception e){
+      System.out.println("[** INSTANT DISPATCH **]");
+      this.insertNoBffer(); //direct api call
     }
     return null;
   }
   /*
   * Single Api call for each raw event from rabbitmq
-  * [DEPRICATED]
   */
-  public InsertAllResponse insertAll() {
+  public InsertAllResponse insertNoBffer() {
     InsertAllRequest request = this.prepareBigQueryInsertRequest(this.data);
     InsertAllResponse response = bigquery.insertAll(request);
     if (response.hasErrors()) {

@@ -20,18 +20,20 @@ public class ActionHandler {
   public static Object getLock(){
     return LOCK;
   }
+
+  // internal events routing
   public static void dispatchEvent(String event,String source){
     switch(event) {
-      case "insert.buffer.dispatch":
-        if(insertionControl != null && insertionControl.dispatchReady()){
-          synchronized(LOCK){
-            BigQueryOps.dispatchBatchInsertions(insertionControl);
-          }
+      case "dispatch.buffer.time": // dispatch all
+        System.out.println("[** "+source+" DISPATCH **][** "+event+" **]");
+        if(insertionControl != null ){
+          BigQueryOps.dispatchBatchInsertionsBasedOnTime(insertionControl);
         }
         break;
-      case "unsync.insert.buffer.dispatch":
+      case "dispatch.buffer.size": // dispatch based on size
+        System.out.println("[** "+source+" DISPATCH **] [** "+event+" **]");
         if(insertionControl != null && insertionControl.dispatchReady()){
-            BigQueryOps.dispatchBatchInsertions(insertionControl);
+          BigQueryOps.dispatchBatchInsertionsBasedOnSize(insertionControl);
         }
         break;
       default:
@@ -39,6 +41,8 @@ public class ActionHandler {
         break;
     }
   }
+
+  // external events routing
   public void handle() {
     String target = this.message.getString("target");
     String action = this.message.getString("action");
@@ -69,9 +73,7 @@ public class ActionHandler {
             new BigQueryOps(this.message.getJSONObject("data")).updateTable();
             break;
           case "insert":
-            synchronized(LOCK){
-              new BigQueryOps(this.message.getJSONObject("data")).processBatchInsertion(insertionControl);
-            }
+            new BigQueryOps(this.message.getJSONObject("data")).insert(insertionControl);
             break;
           case "delete":
             new BigQueryOps(this.message.getJSONObject("data")).deleteTable();

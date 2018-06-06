@@ -62,15 +62,11 @@ public class BitservApp {
       public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
           throws IOException {
         String message = new String(body, "UTF-8");
-        logger.info("[X] Message received: " + message);
-        
+        // logger.info("[X] Message received: " + message);
         new ActionHandler(message).handle();
-        
-        long deliveryTag = envelope.getDeliveryTag();
-        channel.basicAck(deliveryTag, false);
       }
     };
-    channel.basicConsume(args.getrmQueue(), false, consumer);
+    channel.basicConsume(args.getrmQueue(), true, consumer);
     logger.info("Bitserv connected to BigQuery");
     /*
     * handle SIGTERM & SIGINT & SIGHUP
@@ -82,18 +78,10 @@ public class BitservApp {
       {
         synchronized(ActionHandler.getLock()){
           System.out.println("[gracefull shutdown]  Shutdown begin...");
-          try{
-            String consumerTag = consumer.getConsumerTag();
-            System.out.println(consumerTag);
-            channel.basicCancel(consumerTag);
-            channel.close();
-            connection.close();
-          }catch( IOException | TimeoutException e ){
-            logger.error("[BITSERVE Shutdown Error] : "+ e.toString());
-          }
           timer.cancel();
-          ActionHandler.dispatchEvent("unsync.insert.buffer.dispatch","SHUTDOWN-VM");
-          System.out.println("Total inserts in the session : "+ insertionControl.getEventsDispatchedCount());
+          System.out.println("[gracefull shutdown]  Timer shutdown");
+          ActionHandler.dispatchEvent("dispatch.buffer.time","SHUTDOWN-VM");
+          System.out.println("[gracefull shutdown]  Total batch-inserts in the session : "+ insertionControl.getEventsDispatchedCount());
           System.out.println("[gracefull shutdown]  Shutdown hook ran!");
         }
       }
@@ -161,18 +149,47 @@ class Args {
 
 class BatchInsertionTimer {
   private Timer timer;
-  private BatchInsertionTimer(int seconds) {
+  private Integer seconds;
+
+  private BatchInsertionTimer(Integer seconds) {
     this.timer = new Timer();
-    this.tick(seconds);
+    this.seconds = seconds;
+    this.startTicking();
   }
-  private void tick(int seconds){
+  private static Integer count = 0;
+  private static Boolean SUBTICK_SUPPORTED = true;
+  private static final Integer SUBTICK = 4;
+  
+  private static boolean isCompleteTick(Integer seconds){
+    return count == seconds;
+  }
+  private static void resetTick(){
+    count = 0;
+  }
+  private static void incrementTick(){
+    count++;
+  }
+
+  // scheduled task
+  private void startTicking(){
+    Integer seconds = this.seconds;
     this.timer.schedule(new TimerTask() {
       @Override
       public void run() {
-        ActionHandler.dispatchEvent("insert.buffer.dispatch","TIMER");
+        synchronized(ActionHandler.getLock()){
+          if(isCompleteTick(seconds)) {
+            ActionHandler.dispatchEvent("dispatch.buffer.time","TIMER");
+            resetTick();
+          }else {
+            ActionHandler.dispatchEvent("dispatch.buffer.size","TIMER");
+          }
+          incrementTick();
+        }
       }
-    }, seconds*1000,seconds*1000);
+    }, 1000, 1000);
   }
+
+  // singleton
   private static BatchInsertionTimer instance = null;
   public static Timer initTimer(int seconds){
     if (instance == null){
