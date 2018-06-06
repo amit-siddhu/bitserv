@@ -197,7 +197,7 @@ public class BigQueryOps {
         Integer tableLevelBatchSize = insertionControl.getBufferSize();
         Integer batches = readyBufferedRequests/tableLevelBatchSize;
         for (int i=0; i< batches; i++ ) { 
-          System.out.println("Batch dispatch based on size : "+ Integer.toString(i) +"  "+Integer.toString(tableLevelBatchSize));
+          // System.out.println("Batch dispatch based on size : "+ Integer.toString(i) +"  "+Integer.toString(tableLevelBatchSize));
           ArrayList<JSONObject> rawInsertRequests = multipop(bufferedRequests.get(dataset).get(table),tableLevelBatchSize);//bufferedRequests.get(dataset).get(table);
           InsertAllRequest bqInsertRequests = prepareBigQueryInsertRequestFromBuffer(rawInsertRequests);
           responses = makeInsertApiCall(bqInsertRequests,responses);
@@ -242,10 +242,10 @@ public class BigQueryOps {
   */
   public ArrayList<InsertAllResponse> insert(BatchInsertionControl insertionControl){
     try{
-      BatchBufferLogger.log("BUFFER");
+      // BatchBufferLogger.log("BUFFER");
       insertionControl.buffer(this.data);
     }catch(Exception e){
-      System.out.println("[** INSTANT DISPATCH **]");
+      // System.out.println("[** INSTANT DISPATCH **]");
       this.insertNoBffer(); //direct api call
     }
     return null;

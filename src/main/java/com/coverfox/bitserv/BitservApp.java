@@ -62,7 +62,7 @@ public class BitservApp {
       public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
           throws IOException {
         String message = new String(body, "UTF-8");
-        // logger.info("[X] Message received: " + message);
+        logger.info("[X] Message received: " + message);
         new ActionHandler(message).handle();
       }
     };
@@ -83,6 +83,7 @@ public class BitservApp {
           ActionHandler.dispatchEvent("dispatch.buffer.time","SHUTDOWN-VM");
           System.out.println("[gracefull shutdown]  Total batch-inserts in the session : "+ insertionControl.getEventsDispatchedCount());
           System.out.println("[gracefull shutdown]  Shutdown hook ran!");
+          logger.info("Gracefull shutdown hook ran");
         }
       }
     });

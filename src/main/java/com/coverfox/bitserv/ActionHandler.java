@@ -25,13 +25,13 @@ public class ActionHandler {
   public static void dispatchEvent(String event,String source){
     switch(event) {
       case "dispatch.buffer.time": // dispatch all
-        System.out.println("[** "+source+" DISPATCH **][** "+event+" **]");
+        // System.out.println("[** "+source+" DISPATCH **][** "+event+" **]");
         if(insertionControl != null ){
           BigQueryOps.dispatchBatchInsertionsBasedOnTime(insertionControl);
         }
         break;
       case "dispatch.buffer.size": // dispatch based on size
-        System.out.println("[** "+source+" DISPATCH **] [** "+event+" **]");
+        // System.out.println("[** "+source+" DISPATCH **] [** "+event+" **]");
         if(insertionControl != null && insertionControl.dispatchReady()){
           BigQueryOps.dispatchBatchInsertionsBasedOnSize(insertionControl);
         }
