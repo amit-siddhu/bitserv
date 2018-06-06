@@ -7,6 +7,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -187,7 +189,7 @@ public class BigQueryOps {
   }
   // replay as batched
   public static ArrayList<InsertAllResponse> dispatchBatchInsertionsBasedOnSize(BatchInsertionControl insertionControl){
-    HashMap<String, HashMap<String,LinkedList<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
+    HashMap<String, HashMap<String,BlockingQueue<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
     ArrayList<InsertAllResponse> responses =  new ArrayList<>();
     for (String dataset : bufferedRequests.keySet()) {
       for (String table : bufferedRequests.get(dataset).keySet()){
@@ -204,18 +206,22 @@ public class BigQueryOps {
     }
     return responses;
   }
-  private static ArrayList<JSONObject> multipop(LinkedList<JSONObject>requestList, Integer size ){
-    LinkedList<JSONObject> q = requestList;
+  private static ArrayList<JSONObject> multipop(BlockingQueue<JSONObject>requestList, Integer size ){
+    BlockingQueue<JSONObject> q = requestList;
     ArrayList<JSONObject> popedRequests = new ArrayList<>();
     Integer count = 0;
     while(count < size && q.peek() != null){
-      popedRequests.add(q.pop());
+      try{
+        popedRequests.add(q.take());
+      }catch(InterruptedException e){
+        e.printStackTrace();
+      }
       count++;
     }
     return popedRequests;
   }
   public static ArrayList<InsertAllResponse> dispatchBatchInsertionsBasedOnTime(BatchInsertionControl insertionControl){
-    HashMap<String, HashMap<String,LinkedList<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
+    HashMap<String, HashMap<String,BlockingQueue<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
     ArrayList<InsertAllResponse> responses =  new ArrayList<>();
     for (String dataset : bufferedRequests.keySet()) {
       for (String table : bufferedRequests.get(dataset).keySet()){

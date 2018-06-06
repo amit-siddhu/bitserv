@@ -6,16 +6,20 @@ import java.util.Map;
 import java.util.ArrayList;
 import java.util.LinkedList;
 
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 
 
 class Buffer{
   // {dataset : {table : [ requestString ] } }
-  private HashMap<String, HashMap<String,LinkedList<JSONObject>>> buffer;
-
-  private int totalEventsCached = 0; // current number of events in buffer
-  public int totalEventsDispatched = 0;
-  public Buffer(){
+  private HashMap<String, HashMap<String,BlockingQueue<JSONObject>>> buffer;
+  private Integer totalEventsCached = 0; // current number of events in buffer
+  public Integer totalEventsDispatched = 0;
+  private Integer capacity; // table level bound
+  
+  public Buffer(Integer capacity){
     this.buffer = new HashMap<>();
+    this.capacity = capacity;
   }
   public void flush(){
     totalEventsCached = 0;
@@ -31,26 +35,30 @@ class Buffer{
     return temp.toString();
   }
   public void add(String dataset, String table, JSONObject request){
-    Map<String, LinkedList<JSONObject>> datasetBuffer;
+    Map<String, BlockingQueue<JSONObject>> datasetBuffer;
     if(!this.buffer.containsKey(dataset)){
-      this.buffer.put(dataset,new HashMap<String,LinkedList<JSONObject>>());
+      this.buffer.put(dataset,new HashMap<String,BlockingQueue<JSONObject>>());
     }
     datasetBuffer = this.buffer.get(dataset);
     if(!datasetBuffer.containsKey(table)){
-      datasetBuffer.put(table,new LinkedList<JSONObject>());
+      datasetBuffer.put(table,new ArrayBlockingQueue<JSONObject>(this.capacity));
     }
-    datasetBuffer.get(table).add(request);
+    try {
+      datasetBuffer.get(table).put(request);
+    }catch(InterruptedException e){
+      e.printStackTrace();
+    }
     this.totalEventsCached += 1;
     this.totalEventsDispatched += 1;
   }
   public HashMap getCachedRequests(){
     return this.buffer;
   }
-  public boolean isEmpty(Integer tableLevelLimit){
-    // return this.totalEventsCached == 0;
+  // change method name [MISLEADING]
+  public boolean dispatchReady(){
     for (String dataset : this.buffer.keySet()) {
       for (String table : this.buffer.get(dataset).keySet()){
-        if(this.buffer.get(dataset).get(table).size() > tableLevelLimit){
+        if(this.buffer.get(dataset).get(table).size() > this.capacity){
           return false;
         }
       }
@@ -74,11 +82,14 @@ public class BatchInsertionControl{
     return instance;
   }
   private BatchInsertionControl(Integer bufferSize){
-    this.buffer = new Buffer();
+    this.buffer = new Buffer(bufferSize*2); 
     this.bufferSize = bufferSize;
   }
   public Integer getBufferSize(){
     return this.bufferSize;
+  }
+  public Buffer getBufferDataStructure(){
+    return this.buffer;
   }
   // for debugging
   public int getEventsDispatchedCount(){
@@ -87,20 +98,15 @@ public class BatchInsertionControl{
   public String toString(){
     return this.buffer.toString();
   }
-  public boolean isBufferable(){
-    return true;
-    // if( this.buffer.getTotalEventsCached() < this.bufferSize ) return true;
-    // return false;
-  }
   public boolean dispatchReady(){
-    return !this.buffer.isEmpty(this.bufferSize);
+    return this.buffer.dispatchReady();
   }
   public void buffer(JSONObject data){
     String dataset = data.getJSONObject("schema").getString("dataset");
     String table = data.getJSONObject("schema").getString("name");
     this.buffer.add(dataset, table, data);
   }
-  public HashMap<String, HashMap<String,LinkedList<JSONObject>>>  getBufferedRequests(){
+  public HashMap<String, HashMap<String,BlockingQueue<JSONObject>>>  getBufferedRequests(){
     return this.buffer.getCachedRequests();
   }
   public void cleanup(){
