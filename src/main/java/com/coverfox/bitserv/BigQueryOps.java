@@ -168,7 +168,7 @@ public class BigQueryOps {
       if (response.hasErrors()) {
         logger.error("Error inserting data: " + response);
       }else {
-        // logger.info("Inserted : " + response);
+        logger.info("Inserted : " + response);
       }
       responses.add(response);
     }catch(BigQueryException e){
@@ -178,7 +178,7 @@ public class BigQueryOps {
         if (response.hasErrors()) {
           logger.error("Error inserting data: " + response);
         }else {
-          // logger.info("Inserted : " + response);
+          logger.info("Inserted : " + response);
         }
         responses.add(response);
       }catch(BigQueryException ex){
