@@ -80,7 +80,11 @@ public class BitservApp {
           System.out.println("[gracefull shutdown]  Shutdown begin...");
           timer.cancel();
           System.out.println("[gracefull shutdown]  Timer shutdown");
-          ActionHandler.dispatchEvent("dispatch.buffer.time","SHUTDOWN-VM");
+          try{
+            ActionHandler.dispatchEvent("dispatch.buffer.time","SHUTDOWN-VM");
+          }catch(Exception e){
+            logger.error("Dispatch error at shutdownhook : " + e);
+          }
           System.out.println("[gracefull shutdown]  Total batch-inserts in the session : "+ insertionControl.getEventsDispatchedCount());
           System.out.println("[gracefull shutdown]  Shutdown hook ran!");
           logger.info("Gracefull shutdown hook ran");
@@ -160,6 +164,8 @@ class BatchInsertionTimer {
   private static Integer count = 0;
   private static Boolean SUBTICK_SUPPORTED = true;
   private static final Integer SUBTICK = 4;
+
+  private static final Logger logger = LogManager.getLogger(BitservApp.class);
   
   private static boolean isCompleteTick(Integer seconds){
     return count == seconds;
@@ -178,13 +184,17 @@ class BatchInsertionTimer {
       @Override
       public void run() {
         synchronized(ActionHandler.getLock()){
-          if(isCompleteTick(seconds)) {
-            ActionHandler.dispatchEvent("dispatch.buffer.time","TIMER");
-            resetTick();
-          }else {
-            ActionHandler.dispatchEvent("dispatch.buffer.size","TIMER");
+          try{
+            if(isCompleteTick(seconds)) {
+              ActionHandler.dispatchEvent("dispatch.buffer.time","TIMER");
+              resetTick();
+            }else {
+              ActionHandler.dispatchEvent("dispatch.buffer.size","TIMER");
+            }
+            incrementTick();
+          }catch(Exception e){
+            logger.error("Dispatch error at timer : "+ e);
           }
-          incrementTick();
         }
       }
     }, 1000, 1000);
