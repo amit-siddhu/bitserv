@@ -162,9 +162,6 @@ class BatchInsertionTimer {
     this.startTicking();
   }
   private static Integer count = 0;
-  private static Boolean SUBTICK_SUPPORTED = true;
-  private static final Integer SUBTICK = 4;
-
   private static final Logger logger = LogManager.getLogger(BitservApp.class);
   
   private static boolean isCompleteTick(Integer seconds){
