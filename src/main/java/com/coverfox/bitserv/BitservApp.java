@@ -77,17 +77,16 @@ public class BitservApp {
       public void run()
       {
         synchronized(ActionHandler.getLock()){
-          System.out.println("[gracefull shutdown]  Shutdown begin...");
+          logger.info("[gracefull shutdown]  Shutdown begin...");
           timer.cancel();
-          System.out.println("[gracefull shutdown]  Timer shutdown");
+          logger.info("[gracefull shutdown]  Timer shutdown");
           try{
             ActionHandler.dispatchEvent("dispatch.buffer.time","SHUTDOWN-VM");
           }catch(Exception e){
             logger.error("Dispatch error at shutdownhook : " + e);
           }
-          System.out.println("[gracefull shutdown]  Total batch-inserts in the session : "+ insertionControl.getEventsDispatchedCount());
-          System.out.println("[gracefull shutdown]  Shutdown hook ran!");
-          logger.info("Gracefull shutdown hook ran");
+          // System.out.println("[gracefull shutdown]  Total batch-inserts in the session : "+ insertionControl.getEventsDispatchedCount());
+          logger.info("[gracefull shutdown]  Shutdown hook ran!");
         }
       }
     });

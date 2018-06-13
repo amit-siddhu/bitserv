@@ -1,7 +1,6 @@
 package com.coverfox.bitserv;
 
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
