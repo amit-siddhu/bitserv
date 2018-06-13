@@ -82,7 +82,7 @@ public class BatchInsertionControl{
     return instance;
   }
   private BatchInsertionControl(Integer bufferSize){
-    this.buffer = new Buffer(bufferSize);
+    this.buffer = new Buffer(2 * bufferSize);
     this.bufferSize = bufferSize;
   }
   public Integer getBufferSize(){

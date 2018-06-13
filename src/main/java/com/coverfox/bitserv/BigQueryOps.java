@@ -196,11 +196,12 @@ public class BigQueryOps {
         Integer readyBufferedRequests = bufferedRequests.get(dataset).get(table).size();
         Integer tableLevelBatchSize = insertionControl.getBufferSize();
         Integer batches = readyBufferedRequests/tableLevelBatchSize;
-        for (int i=0; i< batches; i++ ) { 
-          // System.out.println("Batch dispatch based on size : "+ Integer.toString(i) +"  "+Integer.toString(tableLevelBatchSize));
+        for (int i=0; i< batches ; i++ ) {
           ArrayList<JSONObject> rawInsertRequests = multipop(bufferedRequests.get(dataset).get(table),tableLevelBatchSize);//bufferedRequests.get(dataset).get(table);
-          InsertAllRequest bqInsertRequests = prepareBigQueryInsertRequestFromBuffer(rawInsertRequests);
-          responses = makeInsertApiCall(bqInsertRequests,responses);
+          if(!rawInsertRequests.isEmpty()){
+            InsertAllRequest bqInsertRequests = prepareBigQueryInsertRequestFromBuffer(rawInsertRequests);
+            responses = makeInsertApiCall(bqInsertRequests,responses);
+          }
         }
       }
     }
@@ -221,6 +222,7 @@ public class BigQueryOps {
     return popedRequests;
   }
   public static ArrayList<InsertAllResponse> dispatchBatchInsertionsBasedOnTime(BatchInsertionControl insertionControl){
+    dispatchBatchInsertionsBasedOnSize(insertionControl);
     HashMap<String, HashMap<String,BlockingQueue<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
     ArrayList<InsertAllResponse> responses =  new ArrayList<>();
     for (String dataset : bufferedRequests.keySet()) {
@@ -228,8 +230,10 @@ public class BigQueryOps {
         Integer totalPops = bufferedRequests.get(dataset).get(table).size();
         if(totalPops > 0){
           ArrayList<JSONObject> rawInsertRequests = multipop(bufferedRequests.get(dataset).get(table),totalPops);//bufferedRequests.get(dataset).get(table);
-          InsertAllRequest bqInsertRequests = prepareBigQueryInsertRequestFromBuffer(rawInsertRequests);
-          responses = makeInsertApiCall(bqInsertRequests,responses);
+          if(!rawInsertRequests.isEmpty()){
+            InsertAllRequest bqInsertRequests = prepareBigQueryInsertRequestFromBuffer(rawInsertRequests);
+            responses = makeInsertApiCall(bqInsertRequests,responses);
+          }
         }
       }
     }
