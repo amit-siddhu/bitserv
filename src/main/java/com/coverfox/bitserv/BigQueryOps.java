@@ -196,7 +196,7 @@ public class BigQueryOps {
         Integer readyBufferedRequests = bufferedRequests.get(dataset).get(table).size();
         Integer tableLevelBatchSize = insertionControl.getBufferSize();
         Integer batches = readyBufferedRequests/tableLevelBatchSize;
-        for (int i=0; i< batches ; i++ ) {
+        for (int i=0; i< batches + 1 ; i++ ) {
           ArrayList<JSONObject> rawInsertRequests = multipop(bufferedRequests.get(dataset).get(table),tableLevelBatchSize);//bufferedRequests.get(dataset).get(table);
           if(!rawInsertRequests.isEmpty()){
             InsertAllRequest bqInsertRequests = prepareBigQueryInsertRequestFromBuffer(rawInsertRequests);
@@ -222,22 +222,22 @@ public class BigQueryOps {
     return popedRequests;
   }
   public static ArrayList<InsertAllResponse> dispatchBatchInsertionsBasedOnTime(BatchInsertionControl insertionControl){
-    dispatchBatchInsertionsBasedOnSize(insertionControl);
-    HashMap<String, HashMap<String,BlockingQueue<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
-    ArrayList<InsertAllResponse> responses =  new ArrayList<>();
-    for (String dataset : bufferedRequests.keySet()) {
-      for (String table : bufferedRequests.get(dataset).keySet()){
-        Integer totalPops = bufferedRequests.get(dataset).get(table).size();
-        if(totalPops > 0){
-          ArrayList<JSONObject> rawInsertRequests = multipop(bufferedRequests.get(dataset).get(table),totalPops);//bufferedRequests.get(dataset).get(table);
-          if(!rawInsertRequests.isEmpty()){
-            InsertAllRequest bqInsertRequests = prepareBigQueryInsertRequestFromBuffer(rawInsertRequests);
-            responses = makeInsertApiCall(bqInsertRequests,responses);
-          }
-        }
-      }
-    }
-    return responses;
+    return dispatchBatchInsertionsBasedOnSize(insertionControl);
+    // HashMap<String, HashMap<String,BlockingQueue<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
+    // ArrayList<InsertAllResponse> responses =  new ArrayList<>();
+    // for (String dataset : bufferedRequests.keySet()) {
+    //   for (String table : bufferedRequests.get(dataset).keySet()){
+    //     Integer totalPops = bufferedRequests.get(dataset).get(table).size();
+    //     if(totalPops > 0){
+    //       ArrayList<JSONObject> rawInsertRequests = multipop(bufferedRequests.get(dataset).get(table),totalPops);//bufferedRequests.get(dataset).get(table);
+    //       if(!rawInsertRequests.isEmpty()){
+    //         InsertAllRequest bqInsertRequests = prepareBigQueryInsertRequestFromBuffer(rawInsertRequests);
+    //         responses = makeInsertApiCall(bqInsertRequests,responses);
+    //       }
+    //     }
+    //   }
+    // }
+    // return responses;
   }
   /*
   * Makes Api call for batch of raw events from rabbitmq.
@@ -247,10 +247,12 @@ public class BigQueryOps {
   public ArrayList<InsertAllResponse> insert(BatchInsertionControl insertionControl){
     try{
       // BatchBufferLogger.log("BUFFER");
+      // this.insertNoBffer();
       insertionControl.buffer(this.data);
     }catch(Exception e){
+      logger.error("Error inserting data: "+ e);
       // System.out.println("[** INSTANT DISPATCH **]");
-      this.insertNoBffer(); //direct api call
+      // this.insertNoBffer(); //direct api call
     }
     return null;
   }
