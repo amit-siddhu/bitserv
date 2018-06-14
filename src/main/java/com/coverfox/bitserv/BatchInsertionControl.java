@@ -54,16 +54,15 @@ class Buffer{
   public HashMap getCachedRequests(){
     return this.buffer;
   }
-  // change method name [MISLEADING]
-  public boolean dispatchReady(){
+  public boolean dispatchReady(Integer bufferSize){
     for (String dataset : this.buffer.keySet()) {
       for (String table : this.buffer.get(dataset).keySet()){
-        if(this.buffer.get(dataset).get(table).size() > this.capacity){
-          return false;
+        if(this.buffer.get(dataset).get(table).size() == this.capacity){
+          return true;
         }
       }
     }
-    return true;
+    return false;
   }
   public int getTotalEventsCached(){
     return totalEventsCached;
@@ -99,7 +98,7 @@ public class BatchInsertionControl{
     return this.buffer.toString();
   }
   public boolean dispatchReady(){
-    return this.buffer.dispatchReady();
+    return this.buffer.dispatchReady(this.bufferSize);
   }
   public void buffer(JSONObject data){
     String dataset = data.getJSONObject("schema").getString("dataset");

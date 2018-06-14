@@ -76,16 +76,24 @@ public class BitservApp {
       @Override
       public void run()
       {
+        try{
+          String consumerTag = consumer.getConsumerTag();
+          System.out.println(consumerTag);
+          channel.basicCancel(consumerTag);
+          channel.close();
+          connection.close();
+        }catch( IOException | TimeoutException e ){
+          logger.error("[BITSERVE Shutdown Error] : "+ e.toString());
+        }
+        timer.cancel();
         synchronized(ActionHandler.getLock()){
           logger.info("[gracefull shutdown]  Shutdown begin...");
-          timer.cancel();
           logger.info("[gracefull shutdown]  Timer shutdown");
           try{
             ActionHandler.dispatchEvent("dispatch.buffer.time","SHUTDOWN-VM");
           }catch(Exception e){
             logger.error("Dispatch error at shutdownhook : " + e);
           }
-          // System.out.println("[gracefull shutdown]  Total batch-inserts in the session : "+ insertionControl.getEventsDispatchedCount());
           logger.info("[gracefull shutdown]  Shutdown hook ran!");
         }
       }
