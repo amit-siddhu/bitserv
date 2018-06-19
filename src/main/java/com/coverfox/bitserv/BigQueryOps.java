@@ -181,14 +181,30 @@ public class BigQueryOps {
     for (String dataset : bufferedRequests.keySet()) {
       for (String table : bufferedRequests.get(dataset).keySet()){
         Integer readyBufferedRequests = bufferedRequests.get(dataset).get(table).size();
-        Integer tableLevelBatchSize = insertionControl.getBufferSize();
+        Integer tableLevelBatchSize = insertionControl.getBatchSize();
         Integer batches = readyBufferedRequests/tableLevelBatchSize;
         for (int i=0; i< batches + 1 ; i++ ) {
-          ArrayList<JSONObject> rawInsertRequests = multipop(bufferedRequests.get(dataset).get(table),tableLevelBatchSize);//bufferedRequests.get(dataset).get(table);
+          ArrayList<JSONObject> rawInsertRequests = multipop(bufferedRequests.get(dataset).get(table),tableLevelBatchSize);
           if(!rawInsertRequests.isEmpty()){
             InsertAllRequest bqInsertRequests = prepareBigQueryInsertRequestFromBuffer(rawInsertRequests);
             responses = makeInsertApiCall(bqInsertRequests,responses);
           }
+        }
+      }
+    }
+    return responses;
+  }
+  public static ArrayList<InsertAllResponse> dispatchSingleBatchInsertion(BatchInsertionControl insertionControl){
+    HashMap<String, HashMap<String,BlockingQueue<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
+    ArrayList<InsertAllResponse> responses =  new ArrayList<>();
+    for (String dataset : bufferedRequests.keySet()) {
+      for (String table : bufferedRequests.get(dataset).keySet()){
+        Integer tableLevelBatchSize = insertionControl.getBatchSize();
+        ArrayList<JSONObject> rawInsertRequests = multipop(bufferedRequests.get(dataset).get(table),tableLevelBatchSize);//bufferedRequests.get(dataset).get(table);
+        if(!rawInsertRequests.isEmpty()){
+          InsertAllRequest bqInsertRequests = prepareBigQueryInsertRequestFromBuffer(rawInsertRequests);
+          System.out.println("Insert api call for ("+ Integer.toString(tableLevelBatchSize) +")");
+          responses = makeInsertApiCall(bqInsertRequests,responses);
         }
       }
     }

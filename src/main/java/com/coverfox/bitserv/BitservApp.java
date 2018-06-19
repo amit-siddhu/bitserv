@@ -11,6 +11,13 @@ import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.ExceptionHandler;
 
+import com.google.common.eventbus.AsyncEventBus;
+import com.google.common.eventbus.Subscribe;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import org.json.JSONObject;
+
+
 import com.rabbitmq.client.impl.DefaultExceptionHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -23,6 +30,7 @@ import java.util.TimerTask;
 public class BitservApp {
 
   private static final Logger logger = LogManager.getLogger(BitservApp.class);
+  public static AsyncEventBus eventbus;
 
   public static void main(String[] argv) throws Exception {
     Args args = new Args();
@@ -46,23 +54,26 @@ public class BitservApp {
       }
     };
     factory.setExceptionHandler(eh);
-
     Connection connection = factory.newConnection();
     Channel channel = connection.createChannel();
-
     channel.queueDeclare(args.getrmQueue(), true, false, false, null);
     logger.info("Bitserv connected to RabbitMQ");
-
+    
     BatchInsertionControl insertionControl = BatchInsertionControl.getInstance(args.getrmBufferSize());
-    Timer timer = BatchInsertionTimer.initTimer(args.getrmBufferTime());
-    ActionHandler.initStaticDependecies(insertionControl);
-
+    ExecutorService executor = Executors.newFixedThreadPool(1);
+    eventbus = new AsyncEventBus(executor);
+    // ExecutorService bufferExec = Executors.newFixedThreadPool(1);
+    // eventbus.register(new AddToBufferListener(bufferExec,insertionControl));
+    ExecutorService dispatchExec = Executors.newFixedThreadPool(1);
+    eventbus.register(new DispatchBufferListener(dispatchExec,insertionControl));
+    ActionHandler.initStaticDependecies(insertionControl,eventbus);
+    
     DefaultConsumer consumer = new DefaultConsumer(channel) {
       @Override
       public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
           throws IOException {
         String message = new String(body, "UTF-8");
-        logger.info("[X] Message received: " + message);
+        // logger.info("[X] Message received: " + message);
         new ActionHandler(message).handle();
       }
     };
@@ -85,19 +96,79 @@ public class BitservApp {
         }catch( IOException | TimeoutException e ){
           logger.error("[BITSERVE Shutdown Error] : "+ e.toString());
         }
-        timer.cancel();
-        synchronized(ActionHandler.getLock()){
-          logger.info("[gracefull shutdown]  Shutdown begin...");
-          logger.info("[gracefull shutdown]  Timer shutdown");
-          try{
-            ActionHandler.dispatchEvent("dispatch.buffer.time","SHUTDOWN-VM");
-          }catch(Exception e){
-            logger.error("Dispatch error at shutdownhook : " + e);
-          }
-          logger.info("[gracefull shutdown]  Shutdown hook ran!");
+
+        dispatchExec.shutdown();
+
+        // timer.cancel();
+        logger.info("[gracefull shutdown]  Shutdown begin...");
+        logger.info("[gracefull shutdown]  Timer shutdown");
+        try{
+          ActionHandler.dispatchEvent("dispatch.buffer.all","SHUTDOWN-VM");
+        }catch(Exception e){
+          logger.error("Dispatch error at shutdownhook : " + e);
         }
+
+        //wait for executors to shutodown 
+
+        logger.info("[gracefull shutdown]  Shutdown hook ran!");
       }
     });
+  }
+}
+class AddToBufferTask implements Runnable {
+    private JSONObject message;
+    private BatchInsertionControl bufferControl;
+    public AddToBufferTask(JSONObject msg, BatchInsertionControl bufferControl){
+        this.message = msg;
+        this.bufferControl = bufferControl;
+    }
+    @Override
+    public void run() {
+        // System.out.println("Add to Buffer : " + Thread.currentThread().getName()+" Start." + this.message.toString());
+        Integer bufferIndicator = this.bufferControl.buffer(this.message);
+        if(bufferIndicator > 10) System.out.println("buffer control check : "+ Integer.toString(bufferIndicator));
+        if(this.bufferControl.dispatchReady(bufferIndicator)) {
+          System.out.println("pre buffer batch dispatch : "+ Integer.toString(bufferIndicator));
+          BitservApp.eventbus.post(new BufferDispatchEvent());
+        }
+    }
+}
+class AddToBufferListener {
+  private ExecutorService executor;
+  private BatchInsertionControl bufferControl;
+  public AddToBufferListener(ExecutorService exec, BatchInsertionControl bufferControl){
+    this.executor = exec;
+    this.bufferControl = bufferControl;
+  }
+  @Subscribe
+  public void task(BSevent event) {
+    String eventname = event.getName();
+    JSONObject payload = event.getMessage();
+    this.executor.execute(new AddToBufferTask(payload,this.bufferControl));
+  }
+}
+
+class DispatchBufferTask implements Runnable {
+    private BatchInsertionControl bufferControl;
+    public DispatchBufferTask(BatchInsertionControl bufferControl){
+        this.bufferControl = bufferControl;
+    }
+    @Override
+    public void run() {
+        System.out.println("[**Dispatch Buffer**] : " + Thread.currentThread().getName());
+        ActionHandler.dispatchEvent("dispatch.buffer.batch","THREAD");
+    }
+}
+class DispatchBufferListener {
+  private ExecutorService executor;
+  private BatchInsertionControl bufferControl;
+  public DispatchBufferListener(ExecutorService exec, BatchInsertionControl bufferControl){
+    this.executor = exec;
+    this.bufferControl = bufferControl;
+  }
+  @Subscribe
+  public void task(BufferDispatchEvent event) {
+    this.executor.execute(new DispatchBufferTask(this.bufferControl));
   }
 }
 
@@ -156,60 +227,5 @@ class Args {
 
   public Integer getrmBufferTime() {
     return this.rmBufferTime;
-  }
-}
-
-class BatchInsertionTimer {
-  private Timer timer;
-  private Integer seconds;
-
-  private BatchInsertionTimer(Integer seconds) {
-    this.timer = new Timer();
-    this.seconds = seconds;
-    this.startTicking();
-  }
-  private static Integer count = 0;
-  private static final Logger logger = LogManager.getLogger(BitservApp.class);
-  
-  private static boolean isCompleteTick(Integer seconds){
-    return count == seconds;
-  }
-  private static void resetTick(){
-    count = 0;
-  }
-  private static void incrementTick(){
-    count++;
-  }
-
-  // scheduled task
-  private void startTicking(){
-    Integer seconds = this.seconds;
-    this.timer.schedule(new TimerTask() {
-      @Override
-      public void run() {
-        synchronized(ActionHandler.getLock()){
-          try{
-            if(isCompleteTick(seconds)) {
-              ActionHandler.dispatchEvent("dispatch.buffer.time","TIMER");
-              resetTick();
-            }else {
-              ActionHandler.dispatchEvent("dispatch.buffer.size","TIMER");
-            }
-            incrementTick();
-          }catch(Exception e){
-            logger.error("Dispatch error at timer : "+ e);
-          }
-        }
-      }
-    }, 1000, 1000);
-  }
-
-  // singleton
-  private static BatchInsertionTimer instance = null;
-  public static Timer initTimer(int seconds){
-    if (instance == null){
-      instance = new BatchInsertionTimer(seconds);
-    }
-    return instance.timer;
   }
 }

@@ -5,33 +5,32 @@ import org.json.JSONObject;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.google.common.eventbus.AsyncEventBus;
+
 public class ActionHandler {
   private static final Logger logger = LogManager.getLogger(BigQueryOps.class);
   private JSONObject message;
-  private static BatchInsertionControl insertionControl;
-  private static final Object LOCK = new Object();
+  private static BatchInsertionControl insertionControl; // remove this from action_handler
+  private static AsyncEventBus eventbus;
 
   public ActionHandler(String message) {
     this.message = new JSONObject(message);
   }
-  public static void initStaticDependecies(BatchInsertionControl controlInstance){
+  public static void initStaticDependecies(BatchInsertionControl controlInstance, AsyncEventBus e){
     insertionControl = controlInstance;
-  }
-  public static Object getLock(){
-    return LOCK;
+    eventbus = e;
   }
 
-  // internal events routing
   public static void dispatchEvent(String event,String source){
     switch(event) {
-      case "dispatch.buffer.time": // dispatch all
+      case "dispatch.buffer.all":
         if(insertionControl != null ){
-          BigQueryOps.dispatchBatchInsertionsBasedOnTime(insertionControl);
+          BigQueryOps.dispatchBatchInsertionsBasedOnSize(insertionControl);
         }
         break;
-      case "dispatch.buffer.size": // dispatch based on size
-        if(insertionControl != null && insertionControl.dispatchReady()){
-          BigQueryOps.dispatchBatchInsertionsBasedOnSize(insertionControl);
+      case "dispatch.buffer.batch":
+        if(insertionControl != null){
+          BigQueryOps.dispatchSingleBatchInsertion(insertionControl);
         }
         break;
       default:
@@ -71,7 +70,14 @@ public class ActionHandler {
             new BigQueryOps(this.message.getJSONObject("data")).updateTable();
             break;
           case "insert":
-            new BigQueryOps(this.message.getJSONObject("data")).insert(insertionControl);
+            Integer bufferIndicator = insertionControl.buffer(this.message.getJSONObject("data"));
+            if(bufferIndicator > 10) System.out.println("buffer control check : "+ Integer.toString(bufferIndicator));
+            if(insertionControl.dispatchReady(bufferIndicator)) {
+              System.out.println("pre buffer batch dispatch : "+ Integer.toString(bufferIndicator));
+              eventbus.post(new BufferDispatchEvent());
+            }
+            // eventbus.post(new BSevent("buffer.add",this.message.getJSONObject("data")));
+            // new BigQueryOps(this.message.getJSONObject("data")).insert(insertionControl);
             break;
           case "delete":
             new BigQueryOps(this.message.getJSONObject("data")).deleteTable();

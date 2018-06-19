@@ -13,17 +13,12 @@ import java.util.concurrent.BlockingQueue;
 class Buffer{
   // {dataset : {table : [ requestString ] } }
   private HashMap<String, HashMap<String,BlockingQueue<JSONObject>>> buffer;
-  private Integer totalEventsCached = 0; // current number of events in buffer
   public Integer totalEventsDispatched = 0;
   private Integer capacity; // table level bound
   
   public Buffer(Integer capacity){
     this.buffer = new HashMap<>();
     this.capacity = capacity;
-  }
-  public void flush(){
-    totalEventsCached = 0;
-    this.buffer.clear();
   }
   public String toString(){
     HashMap<String,Integer> temp = new HashMap<String,Integer>();
@@ -34,7 +29,7 @@ class Buffer{
     }
     return temp.toString();
   }
-  public void add(String dataset, String table, JSONObject request){
+  public Integer add(String dataset, String table, JSONObject request){
     Map<String, BlockingQueue<JSONObject>> datasetBuffer;
     if(!this.buffer.containsKey(dataset)){
       this.buffer.put(dataset,new HashMap<String,BlockingQueue<JSONObject>>());
@@ -48,68 +43,69 @@ class Buffer{
     }catch(InterruptedException e){
       e.printStackTrace();
     }
-    this.totalEventsCached += 1;
     this.totalEventsDispatched += 1;
+    if(this.totalEventsDispatched%10 == 0){
+      System.out.println("buffer-10");
+    }
+    return datasetBuffer.get(table).size();
   }
   public HashMap getCachedRequests(){
     return this.buffer;
   }
-  public boolean dispatchReady(Integer bufferSize){
-    for (String dataset : this.buffer.keySet()) {
-      for (String table : this.buffer.get(dataset).keySet()){
-        if(this.buffer.get(dataset).get(table).size() == this.capacity){
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-  public int getTotalEventsCached(){
-    return totalEventsCached;
-  }
+  // public boolean dispatchReady(Integer bufferSize){
+  //   for (String dataset : this.buffer.keySet()) {
+  //     for (String table : this.buffer.get(dataset).keySet()){
+  //       if(this.buffer.get(dataset).get(table).size() == this.capacity){
+  //         return true;
+  //       }
+  //     }
+  //   }
+  //   return false;
+  // }
 }
 
 // singleton
 public class BatchInsertionControl{
   private Integer bufferSize;// in messages
+  private Integer batchSize;// in messages
   private Buffer buffer;
   private static BatchInsertionControl instance = null;
-  public static BatchInsertionControl getInstance(Integer bufferSize){
+  public static BatchInsertionControl getInstance(Integer batchSize){
     if (instance == null) {
-      instance = new BatchInsertionControl(bufferSize);
+      instance = new BatchInsertionControl(batchSize);
     }
     return instance;
   }
-  private BatchInsertionControl(Integer bufferSize){
-    this.buffer = new Buffer(2 * bufferSize);
-    this.bufferSize = bufferSize;
+  private BatchInsertionControl(Integer batchSize){
+    this.bufferSize = 2 * batchSize;
+    this.buffer = new Buffer(this.bufferSize);
+    this.batchSize = batchSize;
   }
   public Integer getBufferSize(){
     return this.bufferSize;
   }
-  public Buffer getBufferDataStructure(){
-    return this.buffer;
+  public Integer getBatchSize(){
+    return this.batchSize;
   }
-  // for debugging
-  public int getEventsDispatchedCount(){
-    return this.buffer.totalEventsDispatched;
+  public Buffer getBuffer(){
+    return this.buffer;
   }
   public String toString(){
     return this.buffer.toString();
   }
-  public boolean dispatchReady(){
-    return this.buffer.dispatchReady(this.bufferSize);
+  public boolean dispatchReady(Integer bufferIndicator){
+    if(bufferIndicator >= this.batchSize){
+      return true;
+    }
+    return false;
   }
-  public void buffer(JSONObject data){
+  public Integer buffer(JSONObject data){
     String dataset = data.getJSONObject("schema").getString("dataset");
     String table = data.getJSONObject("schema").getString("name");
-    this.buffer.add(dataset, table, data);
+    return this.buffer.add(dataset, table, data);
   }
   public HashMap<String, HashMap<String,BlockingQueue<JSONObject>>>  getBufferedRequests(){
     return this.buffer.getCachedRequests();
-  }
-  public void cleanup(){
-    this.buffer.flush();
   }
 }
 
