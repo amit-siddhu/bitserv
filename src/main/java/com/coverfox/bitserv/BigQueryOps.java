@@ -224,9 +224,6 @@ public class BigQueryOps {
     }
     return popedRequests;
   }
-  public static ArrayList<InsertAllResponse> dispatchBatchInsertionsBasedOnTime(BatchInsertionControl insertionControl){
-    return dispatchBatchInsertionsBasedOnSize(insertionControl);
-  }
   /*
   * Makes Api call for batch of raw events from rabbitmq.
   * Cached Requests are maintained at BatchInsertionControl [refer].

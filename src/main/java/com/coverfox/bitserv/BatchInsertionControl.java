@@ -70,14 +70,14 @@ public class BatchInsertionControl{
   private Integer batchSize;// in messages
   private Buffer buffer;
   private static BatchInsertionControl instance = null;
-  public static BatchInsertionControl getInstance(Integer batchSize){
+  public static BatchInsertionControl getInstance(Integer batchSize, Integer capacityFactor){
     if (instance == null) {
-      instance = new BatchInsertionControl(batchSize);
+      instance = new BatchInsertionControl(batchSize,capacityFactor);
     }
     return instance;
   }
-  private BatchInsertionControl(Integer batchSize){
-    this.bufferSize = 2 * batchSize;
+  private BatchInsertionControl(Integer batchSize, Integer capacityFactor){
+    this.bufferSize = capacityFactor * batchSize;
     this.buffer = new Buffer(this.bufferSize);
     this.batchSize = batchSize;
   }

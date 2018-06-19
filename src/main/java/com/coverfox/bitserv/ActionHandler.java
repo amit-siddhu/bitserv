@@ -73,6 +73,7 @@ public class ActionHandler {
             Integer bufferIndicator = insertionControl.buffer(this.message.getJSONObject("data"));
             if(bufferIndicator > 10) System.out.println("buffer control check : "+ Integer.toString(bufferIndicator));
             if(insertionControl.dispatchReady(bufferIndicator)) {
+
               System.out.println("pre buffer batch dispatch : "+ Integer.toString(bufferIndicator));
               eventbus.post(new BufferDispatchEvent());
             }

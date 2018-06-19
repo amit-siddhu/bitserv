@@ -16,7 +16,7 @@ import com.google.common.eventbus.Subscribe;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.json.JSONObject;
-
+import java.util.concurrent.TimeUnit;
 
 import com.rabbitmq.client.impl.DefaultExceptionHandler;
 import org.apache.logging.log4j.LogManager;
@@ -59,12 +59,10 @@ public class BitservApp {
     channel.queueDeclare(args.getrmQueue(), true, false, false, null);
     logger.info("Bitserv connected to RabbitMQ");
     
-    BatchInsertionControl insertionControl = BatchInsertionControl.getInstance(args.getrmBufferSize());
+    BatchInsertionControl insertionControl = BatchInsertionControl.getInstance(args.getBufferBatchSize(),args.getBufferCapacityFactor());
     ExecutorService executor = Executors.newFixedThreadPool(1);
     eventbus = new AsyncEventBus(executor);
-    // ExecutorService bufferExec = Executors.newFixedThreadPool(1);
-    // eventbus.register(new AddToBufferListener(bufferExec,insertionControl));
-    ExecutorService dispatchExec = Executors.newFixedThreadPool(1);
+    ExecutorService dispatchExec = Executors.newFixedThreadPool(args.getBufferCapacityFactor());
     eventbus.register(new DispatchBufferListener(dispatchExec,insertionControl));
     ActionHandler.initStaticDependecies(insertionControl,eventbus);
     
@@ -72,13 +70,30 @@ public class BitservApp {
       @Override
       public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
           throws IOException {
+        // try{
+        //   Thread.sleep(10000);
+        // }catch(InterruptedException e){
+
+        // }
         String message = new String(body, "UTF-8");
+
         // logger.info("[X] Message received: " + message);
         new ActionHandler(message).handle();
       }
     };
     channel.basicConsume(args.getrmQueue(), true, consumer);
     logger.info("Bitserv connected to BigQuery");
+    /*
+    * Timer for Dispatch event
+    */
+    Integer dispatchInterval = args.getBufferDispatchInterval();
+    Timer timer = new Timer();
+    timer.schedule(new TimerTask() {
+      @Override
+      public void run() {
+        eventbus.post(new BufferDispatchEvent(true));
+      }
+    }, dispatchInterval*1000, dispatchInterval*1000);
     /*
     * handle SIGTERM & SIGINT & SIGHUP
     */
@@ -98,8 +113,14 @@ public class BitservApp {
         }
 
         dispatchExec.shutdown();
-
+        //wait for executors to shutodown 
+        try {
+          dispatchExec.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+        } catch (InterruptedException e) {  
+          dispatchExec.shutdownNow();
+        }
         // timer.cancel();
+        System.out.println(insertionControl.toString());
         logger.info("[gracefull shutdown]  Shutdown begin...");
         logger.info("[gracefull shutdown]  Timer shutdown");
         try{
@@ -107,56 +128,25 @@ public class BitservApp {
         }catch(Exception e){
           logger.error("Dispatch error at shutdownhook : " + e);
         }
-
-        //wait for executors to shutodown 
-
+        System.out.println(insertionControl.toString());
         logger.info("[gracefull shutdown]  Shutdown hook ran!");
       }
     });
   }
 }
-class AddToBufferTask implements Runnable {
-    private JSONObject message;
-    private BatchInsertionControl bufferControl;
-    public AddToBufferTask(JSONObject msg, BatchInsertionControl bufferControl){
-        this.message = msg;
-        this.bufferControl = bufferControl;
-    }
-    @Override
-    public void run() {
-        // System.out.println("Add to Buffer : " + Thread.currentThread().getName()+" Start." + this.message.toString());
-        Integer bufferIndicator = this.bufferControl.buffer(this.message);
-        if(bufferIndicator > 10) System.out.println("buffer control check : "+ Integer.toString(bufferIndicator));
-        if(this.bufferControl.dispatchReady(bufferIndicator)) {
-          System.out.println("pre buffer batch dispatch : "+ Integer.toString(bufferIndicator));
-          BitservApp.eventbus.post(new BufferDispatchEvent());
-        }
-    }
-}
-class AddToBufferListener {
-  private ExecutorService executor;
-  private BatchInsertionControl bufferControl;
-  public AddToBufferListener(ExecutorService exec, BatchInsertionControl bufferControl){
-    this.executor = exec;
-    this.bufferControl = bufferControl;
-  }
-  @Subscribe
-  public void task(BSevent event) {
-    String eventname = event.getName();
-    JSONObject payload = event.getMessage();
-    this.executor.execute(new AddToBufferTask(payload,this.bufferControl));
-  }
-}
 
 class DispatchBufferTask implements Runnable {
     private BatchInsertionControl bufferControl;
-    public DispatchBufferTask(BatchInsertionControl bufferControl){
+    private BufferDispatchEvent event;
+    public DispatchBufferTask(BatchInsertionControl bufferControl, BufferDispatchEvent event){
         this.bufferControl = bufferControl;
+        this.event = event;
     }
     @Override
     public void run() {
         System.out.println("[**Dispatch Buffer**] : " + Thread.currentThread().getName());
-        ActionHandler.dispatchEvent("dispatch.buffer.batch","THREAD");
+        if(event.dispatchAll) ActionHandler.dispatchEvent("dispatch.buffer.all","DISPATCHER");
+        else ActionHandler.dispatchEvent("dispatch.buffer.batch","DISPATCHER");
     }
 }
 class DispatchBufferListener {
@@ -168,7 +158,7 @@ class DispatchBufferListener {
   }
   @Subscribe
   public void task(BufferDispatchEvent event) {
-    this.executor.execute(new DispatchBufferTask(this.bufferControl));
+    this.executor.execute(new DispatchBufferTask(this.bufferControl, event));
   }
 }
 
@@ -191,11 +181,14 @@ class Args {
   @Parameter(names = "-rmVhost", description = "RabbitMQ virtual host")
   private String rmVhost = "/";
 
-  @Parameter(names = "-rmBufferSize", description = "Insertion Buffer Size")
-  private Integer rmBufferSize = 20; // in messages
+  @Parameter(names = "-BufferBatchSize", description = "Insertion Buffer's Batch Size")
+  private Integer bufferBatchSize = 20; // in messages
 
-  @Parameter(names = "-rmBufferTime", description = "Insertion Buffer Time")
-  private Integer rmBufferTime = 10; // in seconds
+  @Parameter(names = "-BufferCapacityFactor", description = "Insertion Buffer's capacity as a factor of Batch Size")
+  private Integer bufferCapacityFactor = 2; // in seconds
+
+  @Parameter(names = "-BufferDispatchInterval", description = "Dispatch Buffer at regular intervals")
+  private Integer bufferDispatchInterval = 10; // in seconds
 
   public String getrmHost() {
     return this.rmHost;
@@ -221,11 +214,15 @@ class Args {
     return this.rmVhost;
   }
 
-  public Integer getrmBufferSize() {
-    return this.rmBufferSize;
+  public Integer getBufferBatchSize() {
+    return this.bufferBatchSize;
   }
 
-  public Integer getrmBufferTime() {
-    return this.rmBufferTime;
+  public Integer getBufferCapacityFactor() {
+    return this.bufferCapacityFactor;
+  }
+
+  public Integer getBufferDispatchInterval() {
+    return this.bufferDispatchInterval;
   }
 }
