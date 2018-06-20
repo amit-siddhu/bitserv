@@ -42,7 +42,7 @@ public class BitservApp {
     logger.info("Booting Bitserv");
     ConnectionFactory factory = new ConnectionFactory();
 
-    factory.setHost(args.getrmHost());
+    factory.setHost(args.getrmHost()); 
     factory.setPort(args.getrmPort());
     factory.setUsername(args.getrmUser());
     factory.setPassword(args.getrmPass());
@@ -57,6 +57,7 @@ public class BitservApp {
     Connection connection = factory.newConnection();
     Channel channel = connection.createChannel();
     channel.queueDeclare(args.getrmQueue(), true, false, false, null);
+    channel.basicQos(args.getBufferBatchSize());
     logger.info("Bitserv connected to RabbitMQ");
     
     BatchInsertionControl insertionControl = BatchInsertionControl.getInstance(args.getBufferBatchSize(),args.getBufferCapacityFactor());
@@ -71,17 +72,19 @@ public class BitservApp {
       public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
           throws IOException {
         // try{
-        //   Thread.sleep(10000);
+        //   Thread.sleep(5000);
         // }catch(InterruptedException e){
 
         // }
         String message = new String(body, "UTF-8");
-
         // logger.info("[X] Message received: " + message);
         new ActionHandler(message).handle();
+        
+        long deliveryTag = envelope.getDeliveryTag();
+        channel.basicAck(deliveryTag, true);
       }
     };
-    channel.basicConsume(args.getrmQueue(), true, consumer);
+    channel.basicConsume(args.getrmQueue(), false, consumer);
     logger.info("Bitserv connected to BigQuery");
     /*
     * Timer for Dispatch event
@@ -102,6 +105,7 @@ public class BitservApp {
       @Override
       public void run()
       {
+        timer.cancel();
         try{
           String consumerTag = consumer.getConsumerTag();
           System.out.println(consumerTag);
@@ -111,15 +115,12 @@ public class BitservApp {
         }catch( IOException | TimeoutException e ){
           logger.error("[BITSERVE Shutdown Error] : "+ e.toString());
         }
-
         dispatchExec.shutdown();
-        //wait for executors to shutodown 
         try {
           dispatchExec.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
         } catch (InterruptedException e) {  
           dispatchExec.shutdownNow();
         }
-        // timer.cancel();
         System.out.println(insertionControl.toString());
         logger.info("[gracefull shutdown]  Shutdown begin...");
         logger.info("[gracefull shutdown]  Timer shutdown");
@@ -130,6 +131,7 @@ public class BitservApp {
         }
         System.out.println(insertionControl.toString());
         logger.info("[gracefull shutdown]  Shutdown hook ran!");
+        MetricAnalyser.log();
       }
     });
   }

@@ -94,7 +94,7 @@ public class BatchInsertionControl{
     return this.buffer.toString();
   }
   public boolean dispatchReady(Integer bufferIndicator){
-    if(bufferIndicator >= this.batchSize){
+    if(bufferIndicator > 0 && bufferIndicator % this.batchSize == 0){
       return true;
     }
     return false;
