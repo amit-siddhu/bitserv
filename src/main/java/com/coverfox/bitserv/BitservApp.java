@@ -60,6 +60,7 @@ public class BitservApp {
     channel.basicQos(args.getBufferBatchSize());
     logger.info("Bitserv connected to RabbitMQ");
     
+    MetricAnalyser.setDebugMode(args.getDebugMode());
     BatchInsertionControl insertionControl = BatchInsertionControl.getInstance(args.getBufferBatchSize(),args.getBufferCapacityFactor());
     ExecutorService executor = Executors.newFixedThreadPool(1);
     eventbus = new AsyncEventBus(executor);
@@ -108,7 +109,6 @@ public class BitservApp {
         timer.cancel();
         try{
           String consumerTag = consumer.getConsumerTag();
-          System.out.println(consumerTag);
           channel.basicCancel(consumerTag);
           channel.close();
           connection.close();
@@ -146,7 +146,6 @@ class DispatchBufferTask implements Runnable {
     }
     @Override
     public void run() {
-        System.out.println("[**Dispatch Buffer**] : " + Thread.currentThread().getName());
         if(event.dispatchAll) ActionHandler.dispatchEvent("dispatch.buffer.all","DISPATCHER");
         else ActionHandler.dispatchEvent("dispatch.buffer.batch","DISPATCHER");
     }
@@ -192,6 +191,9 @@ class Args {
   @Parameter(names = "-BufferDispatchInterval", description = "Dispatch Buffer at regular intervals")
   private Integer bufferDispatchInterval = 10; // in seconds
 
+  @Parameter(names = "-DEBUG", description = "for debugging purpose")
+  private Integer debug = 0;
+
   public String getrmHost() {
     return this.rmHost;
   }
@@ -226,5 +228,10 @@ class Args {
 
   public Integer getBufferDispatchInterval() {
     return this.bufferDispatchInterval;
+  }
+
+  public boolean getDebugMode() {
+    if(this.debug == 1) return true;
+    return false;
   }
 }
