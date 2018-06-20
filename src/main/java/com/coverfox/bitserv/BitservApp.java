@@ -102,14 +102,6 @@ public class BitservApp {
       public void run()
       {
         timer.cancel();
-        try{
-          String consumerTag = consumer.getConsumerTag();
-          channel.basicCancel(consumerTag);
-          channel.close();
-          connection.close();
-        }catch( IOException | TimeoutException e ){
-          logger.error("[BITSERVE Shutdown Error] : "+ e.toString());
-        }
         dispatchExec.shutdown();
         try {
           dispatchExec.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
