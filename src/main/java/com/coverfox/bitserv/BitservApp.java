@@ -72,13 +72,8 @@ public class BitservApp {
       @Override
       public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
           throws IOException {
-        // try{
-        //   Thread.sleep(5000);
-        // }catch(InterruptedException e){
-
-        // }
         String message = new String(body, "UTF-8");
-        // logger.info("[X] Message received: " + message);
+        logger.info("[X] Message received: " + message);
         new ActionHandler(message).handle();
         
         long deliveryTag = envelope.getDeliveryTag();

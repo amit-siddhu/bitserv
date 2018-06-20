@@ -44,9 +44,6 @@ class Buffer{
       e.printStackTrace();
     }
     this.totalEventsDispatched += 1;
-    if(this.totalEventsDispatched%10 == 0){
-      System.out.println("buffer-10");
-    }
     return datasetBuffer.get(table).size();
   }
   public HashMap getCachedRequests(){
