@@ -10,14 +10,27 @@ import com.rabbitmq.client.Consumer;
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.ExceptionHandler;
+
+import com.google.common.eventbus.AsyncEventBus;
+import com.google.common.eventbus.Subscribe;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import org.json.JSONObject;
+import java.util.concurrent.TimeUnit;
+
 import com.rabbitmq.client.impl.DefaultExceptionHandler;
-import java.io.IOException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.io.IOException;
+import java.util.concurrent.TimeoutException;
+import java.util.Timer;
+import java.util.TimerTask;
 
 public class BitservApp {
 
   private static final Logger logger = LogManager.getLogger(BitservApp.class);
+  public static AsyncEventBus eventbus;
 
   public static void main(String[] argv) throws Exception {
     Args args = new Args();
@@ -29,7 +42,7 @@ public class BitservApp {
     logger.info("Booting Bitserv");
     ConnectionFactory factory = new ConnectionFactory();
 
-    factory.setHost(args.getrmHost());
+    factory.setHost(args.getrmHost()); 
     factory.setPort(args.getrmPort());
     factory.setUsername(args.getrmUser());
     factory.setPassword(args.getrmPass());
@@ -41,24 +54,100 @@ public class BitservApp {
       }
     };
     factory.setExceptionHandler(eh);
-
     Connection connection = factory.newConnection();
     Channel channel = connection.createChannel();
     channel.queueDeclare(args.getrmQueue(), true, false, false, null);
+    channel.basicQos(args.getQosFactor() * args.getBufferBatchSize());
     logger.info("Bitserv connected to RabbitMQ");
-
-    Consumer consumer = new DefaultConsumer(channel) {
+    
+    MetricAnalyser.setDebugMode(args.getDebugMode());
+    BatchInsertionControl insertionControl = BatchInsertionControl.getInstance(args.getBufferBatchSize(),args.getBufferCapacityFactor());
+    ExecutorService executor = Executors.newFixedThreadPool(1);
+    eventbus = new AsyncEventBus(executor);
+    ExecutorService dispatchExec = Executors.newFixedThreadPool(args.getTFactor());
+    eventbus.register(new DispatchBufferListener(dispatchExec,insertionControl));
+    ActionHandler.initStaticDependecies(insertionControl,eventbus);
+    
+    DefaultConsumer consumer = new DefaultConsumer(channel) {
       @Override
       public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
           throws IOException {
         String message = new String(body, "UTF-8");
+        long deliveryTag = envelope.getDeliveryTag();
+        channel.basicAck(deliveryTag, true);
         logger.info("[X] Message received: " + message);
         new ActionHandler(message).handle();
-
       }
     };
-    channel.basicConsume(args.getrmQueue(), true, consumer);
+    channel.basicConsume(args.getrmQueue(), false, consumer);
     logger.info("Bitserv connected to BigQuery");
+    /*
+    * Timer for Dispatch event
+    */
+    Integer dispatchInterval = args.getBufferDispatchInterval();
+    Timer timer = new Timer();
+    timer.schedule(new TimerTask() {
+      @Override
+      public void run() {
+        eventbus.post(new BufferDispatchEvent(true));
+      }
+    }, dispatchInterval*1000, dispatchInterval*1000);
+    /*
+    * handle SIGTERM & SIGINT & SIGHUP
+    */
+    Runtime.getRuntime().addShutdownHook(new Thread()
+    {
+      @Override
+      public void run() 
+      {
+        timer.cancel();
+        dispatchExec.shutdown();
+        try {
+          dispatchExec.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+        } catch (InterruptedException e) {  
+          dispatchExec.shutdownNow();
+        }
+        logger.info("[gracefull shutdown]  Shutdown begin...");
+        try{
+          ActionHandler.dispatchEvent("dispatch.buffer.all","SHUTDOWN-VM");
+        }catch(Exception e){
+          logger.error("Dispatch error at shutdownhook : " + e);
+        }
+        logger.info("[gracefull shutdown]  Shutdown hook ran!");
+        MetricAnalyser.log();
+      }
+    });
+  }
+}
+
+class DispatchBufferTask implements Runnable {
+    private static final Logger logger = LogManager.getLogger(BigQueryOps.class);
+    private BatchInsertionControl bufferControl;
+    private BufferDispatchEvent event;
+    public DispatchBufferTask(BatchInsertionControl bufferControl, BufferDispatchEvent event){
+        this.bufferControl = bufferControl;
+        this.event = event;
+    }
+    @Override
+    public void run() {
+      try{
+        if(event.dispatchAll) ActionHandler.dispatchEvent("dispatch.buffer.all","DISPATCHER");
+        else ActionHandler.dispatchEvent("dispatch.buffer.batch","DISPATCHER");
+      }catch(Exception e){
+        logger.error("DISPATCH ERROR : " + e.toString());
+      }
+    }
+}
+class DispatchBufferListener {
+  private ExecutorService executor;
+  private BatchInsertionControl bufferControl;
+  public DispatchBufferListener(ExecutorService exec, BatchInsertionControl bufferControl){
+    this.executor = exec;
+    this.bufferControl = bufferControl;
+  }
+  @Subscribe
+  public void task(BufferDispatchEvent event) {
+    this.executor.execute(new DispatchBufferTask(this.bufferControl, event));
   }
 }
 
@@ -80,6 +169,24 @@ class Args {
 
   @Parameter(names = "-rmVhost", description = "RabbitMQ virtual host")
   private String rmVhost = "/";
+
+  @Parameter(names = "-BufferBatchSize", description = "Insertion Buffer's Batch Size")
+  private Integer bufferBatchSize = 20; // in messages
+
+  @Parameter(names = "-qosFactor", description = "RabbitMQ qos value")
+  private Integer qosFactor = 1;
+
+  @Parameter(names = "-cFactor", description = "Insertion Buffer's capacity as a factor of Batch Size")
+  private Integer cFactor = 1;
+
+  @Parameter(names = "-tFactor", description = "For scaling the worker")
+  private Integer tFactor = 1;
+
+  @Parameter(names = "-BufferDispatchInterval", description = "Dispatch Buffer at regular intervals")
+  private Integer bufferDispatchInterval = 10; // in seconds
+
+  @Parameter(names = "-DEBUG", description = "for debugging purpose")
+  private Integer debug = 0;
 
   public String getrmHost() {
     return this.rmHost;
@@ -103,5 +210,30 @@ class Args {
 
   public String getrmVhost() {
     return this.rmVhost;
+  }
+
+  public Integer getBufferBatchSize() {
+    return this.bufferBatchSize;
+  }
+
+  public Integer getBufferCapacityFactor() {
+    return this.cFactor;
+  }
+
+  public Integer getTFactor() {
+    return this.tFactor;
+  }
+
+  public Integer getQosFactor() {
+    return this.qosFactor;
+  }
+
+  public Integer getBufferDispatchInterval() {
+    return this.bufferDispatchInterval;
+  }
+
+  public boolean getDebugMode() {
+    if(this.debug == 1) return true;
+    return false;
   }
 }

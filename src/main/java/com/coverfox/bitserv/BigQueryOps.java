@@ -5,6 +5,9 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -27,7 +30,6 @@ import com.google.cloud.bigquery.Table;
 import com.google.cloud.bigquery.TableDefinition;
 import com.google.cloud.bigquery.TableId;
 import com.google.cloud.bigquery.TableInfo;
-
 
 public class BigQueryOps {
 
@@ -105,31 +107,140 @@ public class BigQueryOps {
     }
     return table;
   }
-
-  public InsertAllResponse insertAll() {
-    JSONObject jTableSchema = this.data.getJSONObject("schema");
+  /*
+  * For each table, raw requests (mostly one) are converted to BigQuery request objects
+  */
+  public InsertAllRequest prepareBigQueryInsertRequest(JSONObject data) {
+    JSONObject jTableSchema = data.getJSONObject("schema");
     String datasetName = jTableSchema.getString("dataset");
     String tableName = jTableSchema.getString("name");
     TableId tableId = TableId.of(datasetName, tableName);
-
     Iterator<?> jRows = jTableSchema.getJSONArray("rows").iterator();
     JSONObject jRow = null;
     String insertId = null;
     InsertAllRequest.Builder rowBuilder =  InsertAllRequest.newBuilder(tableId);
-
     while (jRows.hasNext()) {
       jRow = (JSONObject) jRows.next();
       insertId = jRow.getString("insertId");
       Map<String, Object> row = jsonToMap(jRow.getJSONObject("json"));
       rowBuilder.addRow(insertId, row);
     }
-
-    InsertAllResponse response = bigquery.insertAll(rowBuilder.build());
-
+    return rowBuilder.build();
+  }
+  /*
+  * For each table, accumulated raw insert requests are converted to BigQuery request objects
+  */
+  public static InsertAllRequest prepareBigQueryInsertRequestFromBuffer(ArrayList<JSONObject> bufferedRequests) {
+    JSONObject jTableSchema = bufferedRequests.get(0).getJSONObject("schema");
+    String datasetName = jTableSchema.getString("dataset");
+    String tableName = jTableSchema.getString("name");
+    TableId tableId = TableId.of(datasetName, tableName);
+    InsertAllRequest.Builder rowBuilder =  InsertAllRequest.newBuilder(tableId);
+    JSONObject jRow = null;
+    String insertId = null;
+    for(JSONObject bufferedRequest : bufferedRequests){
+      Iterator<?> jRows = bufferedRequest.getJSONObject("schema").getJSONArray("rows").iterator();;
+      while (jRows.hasNext()) {
+        jRow = (JSONObject) jRows.next();
+        insertId = jRow.getString("insertId");
+        Map<String, Object> row = jsonToMap(jRow.getJSONObject("json"));
+        rowBuilder.addRow(insertId, row);
+      }
+    }
+    rowBuilder.setSkipInvalidRows(true);
+    return rowBuilder.build();
+  }
+  public static ArrayList<InsertAllResponse> makeInsertApiCall(InsertAllRequest request,ArrayList<InsertAllResponse> responses){
+    try{
+      InsertAllResponse response = bigquery.insertAll(request);
+      if (response.hasErrors()) {
+        logger.error("Error inserting data: " + response);
+        MetricAnalyser.BigqueryError();
+      }else {
+        logger.info("Inserted : " + response);
+        MetricAnalyser.networkCall();
+      }
+      responses.add(response);
+    }catch(BigQueryException e){
+      MetricAnalyser.BigqueryFailure();
+      logger.error("[INSERT_TABLE_ERROR]: " + e);
+      try{
+        InsertAllResponse response = bigquery.insertAll(request);
+        if (response.hasErrors()) {
+          logger.error("Error inserting data: " + response);
+          MetricAnalyser.BigqueryError(2);
+        }else {
+          logger.info("Inserted : " + response);
+          MetricAnalyser.networkCall(2);
+        }
+        responses.add(response);
+      }catch(BigQueryException ex){
+        logger.error("[INSERT_TABLE_ERROR]: " + ex);
+        MetricAnalyser.BigqueryFailure(2);
+      }
+    }
+    return responses;
+  }
+  public static ArrayList<InsertAllResponse> dispatchBatchInsertionsBasedOnSize(BatchInsertionControl insertionControl){
+    HashMap<String, HashMap<String,BlockingQueue<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
+    ArrayList<InsertAllResponse> responses =  new ArrayList<>();
+    for (String dataset : bufferedRequests.keySet()) {
+      for (String table : bufferedRequests.get(dataset).keySet()){
+        Integer readyBufferedRequests = bufferedRequests.get(dataset).get(table).size();
+        Integer tableLevelBatchSize = insertionControl.getBatchSize();
+        Integer batches = readyBufferedRequests/tableLevelBatchSize;
+        for (int i=0; i< batches + 1 ; i++ ) {
+          ArrayList<JSONObject> rawInsertRequests = multipop(bufferedRequests.get(dataset).get(table),tableLevelBatchSize);
+          if(!rawInsertRequests.isEmpty()){
+            MetricAnalyser.dispatchCall(rawInsertRequests.size(), dataset+'|'+table );
+            InsertAllRequest bqInsertRequests = prepareBigQueryInsertRequestFromBuffer(rawInsertRequests);
+            responses = makeInsertApiCall(bqInsertRequests,responses);
+          }
+        }
+      }
+    }
+    return responses;
+  }
+  public static ArrayList<InsertAllResponse> dispatchSingleBatchInsertion(BatchInsertionControl insertionControl){
+    HashMap<String, HashMap<String,BlockingQueue<JSONObject>>>  bufferedRequests = insertionControl.getBufferedRequests();
+    ArrayList<InsertAllResponse> responses =  new ArrayList<>();
+    for (String dataset : bufferedRequests.keySet()) {
+      for (String table : bufferedRequests.get(dataset).keySet()){
+        Integer tableLevelBatchSize = insertionControl.getBatchSize();
+        if(bufferedRequests.get(dataset).get(table).size() < tableLevelBatchSize) return null;
+        ArrayList<JSONObject> rawInsertRequests = multipop(bufferedRequests.get(dataset).get(table),tableLevelBatchSize);//bufferedRequests.get(dataset).get(table);
+        if(!rawInsertRequests.isEmpty()){
+          MetricAnalyser.dispatchCall(rawInsertRequests.size(), dataset+'|'+table);
+          InsertAllRequest bqInsertRequests = prepareBigQueryInsertRequestFromBuffer(rawInsertRequests);
+          responses = makeInsertApiCall(bqInsertRequests,responses);
+        }
+      }
+    }
+    return responses;
+  }
+  private static ArrayList<JSONObject> multipop(BlockingQueue<JSONObject>requestList, Integer size ){
+    BlockingQueue<JSONObject> q = requestList;
+    ArrayList<JSONObject> popedRequests = new ArrayList<>();
+    Integer count = 0;
+    while(count < size && q.peek() != null){
+      try{
+        popedRequests.add(q.take());
+      }catch(InterruptedException e){
+        e.printStackTrace();
+      }
+      count++;
+    }
+    return popedRequests;
+  }
+  /*
+  * Single Api call for each raw event from rabbitmq
+  */
+  public InsertAllResponse insertNoBffer() {
+    InsertAllRequest request = this.prepareBigQueryInsertRequest(this.data);
+    InsertAllResponse response = bigquery.insertAll(request);
     if (response.hasErrors()) {
       logger.error("Error inserting data: " + response);
-    }
-    else {
+    }else {
       logger.info("Inserted : " + response);
     }
     return response;
