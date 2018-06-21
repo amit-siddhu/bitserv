@@ -155,7 +155,7 @@ public class BigQueryOps {
       InsertAllResponse response = bigquery.insertAll(request);
       if (response.hasErrors()) {
         logger.error("Error inserting data: " + response);
-        MetricAnalyser.networkFailure();
+        MetricAnalyser.BigqueryError();
       }else {
         logger.info("Inserted : " + response);
         MetricAnalyser.networkCall();
@@ -168,7 +168,7 @@ public class BigQueryOps {
         InsertAllResponse response = bigquery.insertAll(request);
         if (response.hasErrors()) {
           logger.error("Error inserting data: " + response);
-          MetricAnalyser.networkFailure(2);
+          MetricAnalyser.BigqueryError(2);
         }else {
           logger.info("Inserted : " + response);
           MetricAnalyser.networkCall(2);
@@ -207,6 +207,7 @@ public class BigQueryOps {
     for (String dataset : bufferedRequests.keySet()) {
       for (String table : bufferedRequests.get(dataset).keySet()){
         Integer tableLevelBatchSize = insertionControl.getBatchSize();
+        if(bufferedRequests.get(dataset).get(table).size() < tableLevelBatchSize) return null;
         ArrayList<JSONObject> rawInsertRequests = multipop(bufferedRequests.get(dataset).get(table),tableLevelBatchSize);//bufferedRequests.get(dataset).get(table);
         if(!rawInsertRequests.isEmpty()){
           MetricAnalyser.dispatchCall(rawInsertRequests.size(), dataset+'|'+table);

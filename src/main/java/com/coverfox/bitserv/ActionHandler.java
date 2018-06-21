@@ -69,10 +69,15 @@ public class ActionHandler {
             new BigQueryOps(this.message.getJSONObject("data")).updateTable();
             break;
           case "insert":
-            Integer bufferIndicator = insertionControl.buffer(this.message.getJSONObject("data"));
-            MetricAnalyser.buffering();
-            if(insertionControl.dispatchReady(bufferIndicator)) {
-              eventbus.post(new BufferDispatchEvent());
+            try{
+              Integer bufferIndicator = insertionControl.buffer(this.message.getJSONObject("data"));
+              MetricAnalyser.buffering();
+              if(insertionControl.dispatchReady(bufferIndicator)) {
+                ActionHandler.dispatchEvent("dispatch.buffer.batch","DISPATCHER"); // synchronous execution
+                // eventbus.post(new BufferDispatchEvent()); // asynchronous execution
+              }
+            }catch(Exception e){
+              logger.error("Dispatch Error : " + e.toString());
             }
             break;
           case "delete":

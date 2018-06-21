@@ -57,14 +57,14 @@ public class BitservApp {
     Connection connection = factory.newConnection();
     Channel channel = connection.createChannel();
     channel.queueDeclare(args.getrmQueue(), true, false, false, null);
-    channel.basicQos(args.getBufferBatchSize());
+    channel.basicQos(args.getQosFactor() * args.getBufferBatchSize());
     logger.info("Bitserv connected to RabbitMQ");
     
     MetricAnalyser.setDebugMode(args.getDebugMode());
     BatchInsertionControl insertionControl = BatchInsertionControl.getInstance(args.getBufferBatchSize(),args.getBufferCapacityFactor());
     ExecutorService executor = Executors.newFixedThreadPool(1);
     eventbus = new AsyncEventBus(executor);
-    ExecutorService dispatchExec = Executors.newFixedThreadPool(args.getBufferCapacityFactor());
+    ExecutorService dispatchExec = Executors.newFixedThreadPool(args.getTFactor());
     eventbus.register(new DispatchBufferListener(dispatchExec,insertionControl));
     ActionHandler.initStaticDependecies(insertionControl,eventbus);
     
@@ -73,11 +73,10 @@ public class BitservApp {
       public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
           throws IOException {
         String message = new String(body, "UTF-8");
-        logger.info("[X] Message received: " + message);
-        new ActionHandler(message).handle();
-        
         long deliveryTag = envelope.getDeliveryTag();
         channel.basicAck(deliveryTag, true);
+        logger.info("[X] Message received: " + message);
+        new ActionHandler(message).handle();
       }
     };
     channel.basicConsume(args.getrmQueue(), false, consumer);
@@ -99,7 +98,7 @@ public class BitservApp {
     Runtime.getRuntime().addShutdownHook(new Thread()
     {
       @Override
-      public void run()
+      public void run() 
       {
         timer.cancel();
         dispatchExec.shutdown();
@@ -108,15 +107,12 @@ public class BitservApp {
         } catch (InterruptedException e) {  
           dispatchExec.shutdownNow();
         }
-        System.out.println(insertionControl.toString());
         logger.info("[gracefull shutdown]  Shutdown begin...");
-        logger.info("[gracefull shutdown]  Timer shutdown");
         try{
           ActionHandler.dispatchEvent("dispatch.buffer.all","SHUTDOWN-VM");
         }catch(Exception e){
           logger.error("Dispatch error at shutdownhook : " + e);
         }
-        System.out.println(insertionControl.toString());
         logger.info("[gracefull shutdown]  Shutdown hook ran!");
         MetricAnalyser.log();
       }
@@ -125,6 +121,7 @@ public class BitservApp {
 }
 
 class DispatchBufferTask implements Runnable {
+    private static final Logger logger = LogManager.getLogger(BigQueryOps.class);
     private BatchInsertionControl bufferControl;
     private BufferDispatchEvent event;
     public DispatchBufferTask(BatchInsertionControl bufferControl, BufferDispatchEvent event){
@@ -133,8 +130,12 @@ class DispatchBufferTask implements Runnable {
     }
     @Override
     public void run() {
+      try{
         if(event.dispatchAll) ActionHandler.dispatchEvent("dispatch.buffer.all","DISPATCHER");
         else ActionHandler.dispatchEvent("dispatch.buffer.batch","DISPATCHER");
+      }catch(Exception e){
+        logger.error("DISPATCH ERROR : " + e.toString());
+      }
     }
 }
 class DispatchBufferListener {
@@ -172,8 +173,14 @@ class Args {
   @Parameter(names = "-BufferBatchSize", description = "Insertion Buffer's Batch Size")
   private Integer bufferBatchSize = 20; // in messages
 
-  @Parameter(names = "-BufferCapacityFactor", description = "Insertion Buffer's capacity as a factor of Batch Size")
-  private Integer bufferCapacityFactor = 2; // in seconds
+  @Parameter(names = "-qosFactor", description = "RabbitMQ qos value")
+  private Integer qosFactor = 1;
+
+  @Parameter(names = "-cFactor", description = "Insertion Buffer's capacity as a factor of Batch Size")
+  private Integer cFactor = 1;
+
+  @Parameter(names = "-tFactor", description = "For scaling the worker")
+  private Integer tFactor = 1;
 
   @Parameter(names = "-BufferDispatchInterval", description = "Dispatch Buffer at regular intervals")
   private Integer bufferDispatchInterval = 10; // in seconds
@@ -210,7 +217,15 @@ class Args {
   }
 
   public Integer getBufferCapacityFactor() {
-    return this.bufferCapacityFactor;
+    return this.cFactor;
+  }
+
+  public Integer getTFactor() {
+    return this.tFactor;
+  }
+
+  public Integer getQosFactor() {
+    return this.qosFactor;
   }
 
   public Integer getBufferDispatchInterval() {

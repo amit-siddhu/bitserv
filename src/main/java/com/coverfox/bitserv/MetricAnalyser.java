@@ -11,8 +11,8 @@ public class MetricAnalyser {
   public static Integer networkCalls = 0;
   public static Integer networkCallsRepeat = 0;
   
-  public static Integer networkFailures = 0;
-  public static Integer networkFailuresRepeat = 0;
+  public static Integer bqErrors = 0;
+  public static Integer bqErrorsRepeat = 0;
   
   public static Integer bQFailures = 0;
   public static Integer bQFailuresRepeat = 0;
@@ -42,16 +42,16 @@ public class MetricAnalyser {
   public static void buffering(){
     buffering++;
   }
-  public static void networkFailure(){
-    if(debug) System.out.println("[NETWORK FAILURE]");
-    networkFailures++;
+  public static void BigqueryError(){
+    if(debug) System.out.println("[BIGQUERY ERROR]");
+    bqErrors++;
   }
-  public static void networkFailure(Integer repeatIndex){
+  public static void BigqueryError(Integer repeatIndex){
     if (repeatIndex == 2) {
-      networkCallsRepeat++;
-      System.out.println("[NETWORK FAILURE] 2");
+      bqErrorsRepeat++;
+      System.out.println("[BIGQUERY ERROR] 2");
     }
-    else networkFailure();
+    else BigqueryError();
   }
   public static void BigqueryFailure(){
     if(debug) System.out.println("[BIGQUERY FAILURE]");
@@ -62,14 +62,14 @@ public class MetricAnalyser {
       bQFailuresRepeat++;
       if(debug) System.out.println("[BIGQUERY FAILURE] 2");
     }
-    else networkFailure();
+    else BigqueryFailure();
   }
   public static void log() {
     if(debug){
       System.out.println("# of buffering events : " + Integer.toString(buffering));
       System.out.println("# of dispatch events : " + Integer.toString(dispatchCalls));
       System.out.println("# of network calls : " + Integer.toString(networkCalls + networkCallsRepeat) + " = " + Integer.toString(networkCalls) + "+" +  Integer.toString(networkCallsRepeat));
-      System.out.println("# of network failures : " + Integer.toString(networkFailures + networkFailuresRepeat) + " = " + Integer.toString(networkFailures) + "+" +  Integer.toString(networkFailuresRepeat));
+      System.out.println("# of biQuery errors : " + Integer.toString(bqErrors + bqErrorsRepeat) + " = " + Integer.toString(bqErrors) + "+" +  Integer.toString(bqErrorsRepeat));
       System.out.println("# of biQuery failures : " + Integer.toString(bQFailures + bQFailuresRepeat) + " = " + Integer.toString(bQFailures) + "+" +  Integer.toString(bQFailuresRepeat));
     }
   }
